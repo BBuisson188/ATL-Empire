@@ -215,6 +215,7 @@ let currentPanelTab = "turn";
 init();
 
 function init() {
+  clearLegacyOfflineCache();
   registerGlobalUiEvents();
   if (els.cardGalleryRoot) {
     renderCardGalleryPage();
@@ -238,10 +239,16 @@ function init() {
   if (els.savedGamesList) {
     els.savedGamesList.addEventListener("click", handleSavedGamesClick);
   }
+}
+
+function clearLegacyOfflineCache() {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./service-worker.js?v=12", { updateViaCache: "none" }).then((registration) => {
-      registration.update().catch(() => {});
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      registrations.forEach((registration) => registration.unregister().catch(() => {}));
     }).catch(() => {});
+  }
+  if ("caches" in window) {
+    caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))).catch(() => {});
   }
 }
 

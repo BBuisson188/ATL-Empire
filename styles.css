@@ -151,6 +151,15 @@ select {
   color: #f3cb74;
 }
 
+.build-stamp {
+  margin: 0 0 10px;
+  color: rgba(255, 244, 218, 0.78);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .setup-copy h1,
 .top-bar h1 {
   margin: 0;
