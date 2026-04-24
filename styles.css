@@ -184,6 +184,54 @@ select {
   padding: 20px;
 }
 
+.saved-games-panel {
+  grid-column: 1 / -1;
+}
+
+.saved-games-head h2 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+}
+
+.saved-games-list {
+  display: grid;
+  gap: 10px;
+}
+
+.saved-game-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(130, 110, 70, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 252, 246, 0.88);
+}
+
+.saved-game-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.saved-game-copy strong {
+  font-size: 1rem;
+}
+
+.saved-game-copy span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.saved-game-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .form-grid,
 .player-config {
   display: grid;
@@ -350,7 +398,7 @@ select {
 .center-frame {
   display: grid;
   gap: 14px;
-  padding-top: 28px;
+  padding-top: 8px;
 }
 
 .center-kicker,
@@ -366,10 +414,10 @@ select {
 
 .center-brand-image {
   position: absolute;
-  top: 16px;
+  top: -10px;
   left: 50%;
-  z-index: 1;
-  width: min(420px, 72%);
+  z-index: 0;
+  width: min(290px, 46%);
   height: auto;
   transform: translateX(-50%);
   filter: drop-shadow(0 8px 14px rgba(22, 55, 47, 0.08));
@@ -379,6 +427,8 @@ select {
 .center-tagline {
   max-width: 620px;
   margin: 0 auto;
+  position: relative;
+  z-index: 2;
   color: #514936;
   font-size: clamp(0.92rem, 1.4vw, 1.08rem);
   line-height: 1.45;
@@ -389,6 +439,8 @@ select {
   grid-template-columns: 1fr auto 1fr;
   gap: clamp(12px, 2vw, 26px);
   align-items: center;
+  position: relative;
+  z-index: 2;
 }
 
 .deck-stack {
@@ -546,6 +598,76 @@ select {
   justify-content: center;
 }
 
+.center-turn-console {
+  display: grid;
+  gap: 12px;
+  min-width: min(100%, 340px);
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: rgba(255, 251, 242, 0.82);
+  border: 1px solid rgba(112, 92, 53, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.center-turn-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.center-roll-bay {
+  display: grid;
+  justify-items: center;
+}
+
+.center-roll-button {
+  min-width: 148px;
+  min-height: 74px;
+  padding: 16px 20px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #1b584a 0%, #11342c 100%);
+  border-color: rgba(245, 216, 154, 0.34);
+  color: #fff8ef;
+  font-size: 1.02rem;
+  letter-spacing: 0.03em;
+}
+
+.center-roll-button:hover:not(:disabled) {
+  box-shadow: 0 14px 24px rgba(16, 21, 18, 0.18);
+}
+
+.center-turn-status {
+  margin: 0;
+  min-height: 40px;
+  color: #5a5242;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.center-turn-actions,
+.detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.detail-actions {
+  margin-top: 2px;
+}
+
+.detail-note,
+.turn-panel-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.turn-panel-note {
+  font-size: 0.86rem;
+}
+
 .die-face {
   width: clamp(50px, 7vw, 74px);
   aspect-ratio: 1;
@@ -599,6 +721,12 @@ select {
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
   gap: 14px;
+  position: relative;
+  z-index: 2;
+}
+
+.center-status-row-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .center-spotlight,
@@ -624,6 +752,11 @@ select {
   color: #173d34;
 }
 
+.center-status-row-compact .center-note strong {
+  font-size: clamp(0.94rem, 1.35vw, 1.08rem);
+  line-height: 1.35;
+}
+
 .center-spotlight em {
   color: #8a6d39;
   font-style: normal;
@@ -633,6 +766,8 @@ select {
 .center-rail {
   background: linear-gradient(180deg, rgba(22, 61, 52, 0.98), rgba(15, 43, 37, 0.98));
   color: #fff9ef;
+  position: relative;
+  z-index: 2;
 }
 
 .center-rail span {
@@ -1759,6 +1894,10 @@ select {
   .center-status-row {
     grid-template-columns: 1fr;
   }
+
+  .center-turn-head {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1400px) {
@@ -1814,11 +1953,16 @@ select {
   }
 
   .deck-row {
-    gap: 12px;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .deck-stack {
     min-height: clamp(150px, 21vw, 220px);
+  }
+
+  .center-turn-console {
+    order: -1;
   }
 
   .deck-stack-face {
@@ -1897,6 +2041,14 @@ select {
   .player-card {
     padding: 10px;
   }
+
+  .saved-game-card {
+    grid-template-columns: 1fr;
+  }
+
+  .saved-game-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 1050px) {
@@ -1925,7 +2077,8 @@ select {
   .trade-grid,
   .side-panel,
   .detail-head,
-  .deck-row {
+  .deck-row,
+  .center-status-row-compact {
     grid-template-columns: 1fr;
   }
 

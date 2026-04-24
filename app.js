@@ -5,6 +5,8 @@ const PASS_GO = 200;
 const TRAFFIC_FINE = 50;
 const MAX_PLAYERS = 4;
 const STORAGE_KEY = "atlEmpireSave";
+const SAVE_INDEX_KEY = "atlEmpireSaveIndex";
+const SAVE_SLOT_PREFIX = "atlEmpireSave:";
 const MOVE_STEP_MS = 1000;
 const playerColors = ["#2563eb", "#dc2626", "#16a34a", "#d97706"];
 
@@ -183,6 +185,8 @@ const els = {
   gameName: document.getElementById("game-name"),
   lotteryToggle: document.getElementById("lottery-toggle"),
   playerConfigs: document.getElementById("player-configs"),
+  savedGamesPanel: document.getElementById("saved-games-panel"),
+  savedGamesList: document.getElementById("saved-games-list"),
   board: document.getElementById("board"),
   gameTitle: document.getElementById("game-title"),
   activePlayer: document.getElementById("active-player"),
@@ -217,7 +221,9 @@ function init() {
     return;
   }
   if (!els.setup || !els.game) return;
+  migrateLegacySave();
   renderSetupPlayers();
+  renderSavedGamesList();
   els.humanCount.addEventListener("change", syncCounts);
   els.botCount.addEventListener("change", syncCounts);
   els.setupForm.addEventListener("submit", startGameFromSetup);
@@ -227,20 +233,10 @@ function init() {
     buttonEl.addEventListener("click", () => setPanelTab(buttonEl.dataset.panelTab));
   });
   els.newGame.addEventListener("click", () => {
-    localStorage.removeItem(STORAGE_KEY);
     location.reload();
   });
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (saved) {
-    try {
-      game = hydrate(JSON.parse(saved));
-      showGame();
-      log("Loaded saved game.");
-      render();
-      maybeRunBot();
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    }
+  if (els.savedGamesList) {
+    els.savedGamesList.addEventListener("click", handleSavedGamesClick);
   }
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./service-worker.js").catch(() => {});
@@ -329,6 +325,7 @@ function startGameFromSetup(event) {
     });
   }
   game = {
+    saveId: createSaveId(),
     title: els.gameName.value.trim() || "ATL Empire",
     players,
     current: 0,
@@ -352,6 +349,7 @@ function startGameFromSetup(event) {
       chance: null,
       community: null
     },
+    selectedSpaceIndex: 0,
     chanceDeck: shuffle([...Array(chanceCards.length).keys()]),
     communityDeck: shuffle([...Array(communityCards.length).keys()]),
     log: []
@@ -376,7 +374,9 @@ function hydrate(saved) {
     revealedCards: {
       chance: saved.revealedCards?.chance || null,
       community: saved.revealedCards?.community || null
-    }
+    },
+    saveId: saved.saveId || createSaveId(),
+    selectedSpaceIndex: Number.isInteger(saved.selectedSpaceIndex) ? saved.selectedSpaceIndex : saved.players?.[saved.current || 0]?.position || 0
   };
   restored.players.forEach((player, index) => {
     player.color = player.color || playerColors[index % playerColors.length];
@@ -391,6 +391,7 @@ function showGame() {
   els.setup.classList.add("hidden");
   els.game.classList.remove("hidden");
   els.gameTitle.textContent = game.title;
+  if (game.selectedSpaceIndex == null) game.selectedSpaceIndex = activePlayer().position;
   updatePlayModeButton();
 }
 
@@ -399,7 +400,7 @@ function render() {
   renderBoard();
   renderPlayers();
   renderTurn();
-  renderSpaceDetail(activePlayer().position);
+  renderSpaceDetail(currentSelectedSpaceIndex());
   renderLog();
 }
 
@@ -410,29 +411,25 @@ function renderBoard() {
   center.className = "board-center";
   center.innerHTML = `
     <div class="center-frame">
-      <img class="center-brand-image" src="assets/branding/atl-empire-board-logo.png" alt="ATL Empire board logo">
+      <img class="center-brand-image" src="assets/branding/atl-empire-board-logo-small.png" alt="ATL Empire board logo">
       <p class="center-tagline">Build districts, dodge traffic, and turn the city into your empire.</p>
       <div class="deck-row">
         ${renderDeckStack("chance")}
-        <div class="center-dice ${game.phase === "rolling" ? "rolling" : ""}" aria-live="polite">
-          ${dieMarkup(game.dice[0])}
-          ${dieMarkup(game.dice[1])}
-        </div>
+        ${renderCenterTurnConsole(currentPlayer)}
         ${renderDeckStack("community")}
       </div>
-      <div class="center-status-row">
-        <div class="center-spotlight">
-          <span>Active player</span>
-          <strong><span class="player-dot" style="background:${currentPlayer.color}"></span>${escapeHtml(currentPlayer.name)}</strong>
-          <em>${board[currentPlayer.position].name}</em>
+      <div class="center-status-row center-status-row-compact">
+        <div class="center-note">
+          <span>Lottery Pot</span>
+          <strong>$${game.lotteryPot}</strong>
         </div>
         <div class="center-note">
-          <strong>Lottery Pot: $${game.lotteryPot}</strong>
-          <span>${game.lastCard ? escapeHtml(game.lastCard) : "Cards drawn will appear here."}</span>
+          <span>Latest Card</span>
+          <strong>${game.lastCard ? escapeHtml(game.lastCard) : "Waiting for the next draw."}</strong>
         </div>
       </div>
       <div class="center-rail">
-        <span>Manual decisions, auctions, and debt flow through the board center.</span>
+        <span>The board center now handles rolls, turn flow, auctions, and debt decisions.</span>
       </div>
     </div>
     ${game.auction ? auctionDockHtml() : ""}
@@ -460,8 +457,8 @@ function renderBoard() {
     `;
     cell.addEventListener("click", (event) => {
       event.stopPropagation();
-      setPanelTab("space");
-      renderSpaceDetail(space.index);
+      selectSpace(space.index, true);
+      render();
       showSpacePopover(space.index, cell);
     });
     els.board.appendChild(cell);
@@ -535,40 +532,7 @@ function renderTurn() {
   els.dice.innerHTML = `${dieMarkup(game.dice[0], "compact")}${dieMarkup(game.dice[1], "compact")}`;
   els.dice.setAttribute("aria-label", game.dice[0] ? `Dice showing ${game.dice[0]} and ${game.dice[1]}` : "Dice not rolled yet");
   els.statusLine.textContent = game.status || statusForCurrentTurn();
-  const actions = [];
-  if (game.animating) {
-    actions.push(button("Moving...", "noop", true));
-  } else {
-    if (game.phase === "roll") {
-      if (player.inTraffic && !player.isBot) {
-        if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "usePeachPass"));
-        actions.push(button(`Buy Peach Pass $${TRAFFIC_FINE}`, "buyPeachPass"));
-      }
-      actions.push(button(player.isBot && !game.autoPlay ? "Next: Roll" : "Roll dice", player.isBot && !game.autoPlay ? "botStep" : "roll"));
-    }
-    if (game.phase === "rolling") actions.push(button("Rolling...", "noop", true));
-    if (game.phase === "pending") actions.push(button(game.pending?.label || "Next", "pending"));
-    if (game.phase === "debt") actions.push(button("Resolve Debt", "debt"));
-    if (game.phase === "trafficExit") {
-      if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "trafficExitPass"));
-      actions.push(button(`Buy Peach Pass $${TRAFFIC_FINE}`, "trafficExitPay"));
-    }
-    if (game.phase === "buy") {
-      const space = board[player.position];
-      if (player.isBot && !game.autoPlay) actions.push(button("Next: Decide", "botStep"));
-      else {
-        actions.push(button(`Buy for $${space.price}`, "buy"));
-        actions.push(button("Auction", "auction"));
-      }
-    }
-    if (game.phase === "resolve") actions.push(button(player.isBot && !game.autoPlay ? "Next: End Turn" : "End turn", player.isBot && !game.autoPlay ? "botStep" : "end"));
-    actions.push(button("Manage", "manage"));
-    actions.push(button("Trade", "trade"));
-  }
-  els.actionButtons.innerHTML = actions.join("");
-  els.actionButtons.querySelectorAll("button").forEach((buttonEl) => {
-    buttonEl.addEventListener("click", () => handleAction(buttonEl.dataset.action));
-  });
+  els.actionButtons.innerHTML = `<p class="turn-panel-note">Use the board center controls to roll, resolve space actions, and end the turn.</p>`;
 }
 
 function button(label, action, disabled = false) {
@@ -596,8 +560,10 @@ function renderSpaceDetail(index) {
         ${space.kind === "deed" ? `<dt>Build</dt><dd>${improvements < 5 ? `${improvements} condo${improvements === 1 ? "" : "s"}` : "Tower"}</dd>` : ""}
         <dt>Rent</dt><dd>${rentSummary(space)}</dd>
       </dl>` : ""}
+      ${renderSpaceDetailActions(space, owner)}
     </article>
   `;
+  wireSpaceDetailActions(index);
 }
 
 function rentSummary(space) {
@@ -643,6 +609,73 @@ function handleAction(action) {
   if (action === "end") endTurn();
   if (action === "manage") openManageModal(player);
   if (action === "trade") openTradeModal(player);
+}
+
+function renderCenterTurnConsole(player) {
+  const controls = getTurnControls(player);
+  return `
+    <section class="center-turn-console">
+      <div class="center-turn-head">
+        <div class="center-spotlight">
+          <span>Turn</span>
+          <strong><span class="player-dot" style="background:${player.color}"></span>${escapeHtml(player.name)}</strong>
+          <em>${board[player.position].name}</em>
+        </div>
+        <div class="center-roll-bay" aria-live="polite">
+          ${controls.diceHtml}
+        </div>
+      </div>
+      <p class="center-turn-status">${escapeHtml(game.status || statusForCurrentTurn())}</p>
+      <div class="center-turn-actions">
+        ${controls.actionsHtml}
+      </div>
+    </section>
+  `;
+}
+
+function getTurnControls(player) {
+  const actions = [];
+  let diceHtml = `
+    <div class="center-dice ${game.phase === "rolling" ? "rolling" : ""}">
+      ${dieMarkup(game.dice[0])}
+      ${dieMarkup(game.dice[1])}
+    </div>
+  `;
+  if (game.animating) {
+    actions.push(button("Moving...", "noop", true));
+  } else {
+    if (game.phase === "roll") {
+      if (player.inTraffic && !player.isBot) {
+        if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "usePeachPass"));
+        actions.push(button(`Buy Peach Pass $${TRAFFIC_FINE}`, "buyPeachPass"));
+      }
+      if (!player.isBot || !game.autoPlay) {
+        diceHtml = `<button type="button" class="center-roll-button" data-center-action="${player.isBot && !game.autoPlay ? "botStep" : "roll"}">${player.isBot && !game.autoPlay ? "Next: Roll" : "Roll Dice"}</button>`;
+      }
+    }
+    if (game.phase === "rolling") actions.push(button("Rolling...", "noop", true));
+    if (game.phase === "pending") actions.push(button(game.pending?.label || "Next", "pending"));
+    if (game.phase === "debt") actions.push(button("Resolve Debt", "debt"));
+    if (game.phase === "trafficExit") {
+      if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "trafficExitPass"));
+      actions.push(button(`Buy Peach Pass $${TRAFFIC_FINE}`, "trafficExitPay"));
+    }
+    if (game.phase === "buy") {
+      const space = board[player.position];
+      if (player.isBot && !game.autoPlay) actions.push(button("Next: Decide", "botStep"));
+      else {
+        actions.push(button(`Buy for $${space.price}`, "buy"));
+        actions.push(button("Auction", "auction"));
+      }
+    }
+    if (game.phase === "resolve") actions.push(button(player.isBot && !game.autoPlay ? "Next: End Turn" : "End Turn", player.isBot && !game.autoPlay ? "botStep" : "end"));
+    actions.push(button("Manage", "manage"));
+    actions.push(button("Trade", "trade"));
+  }
+  return {
+    diceHtml,
+    actionsHtml: actions.join("")
+  };
 }
 
 function togglePlayMode() {
@@ -809,6 +842,7 @@ async function resolveTrafficExit(method) {
 function movePlayer(player, steps) {
   const oldPosition = player.position;
   player.position = (player.position + steps + board.length) % board.length;
+  game.selectedSpaceIndex = player.position;
   if (steps > 0 && player.position < oldPosition) {
     player.cash += PASS_GO;
     log(`${player.name} passed Peachtree Street and collected $200.`);
@@ -928,6 +962,7 @@ async function drawCard(player, deckName) {
   const card = cards[cardIndex];
   const deckLabel = deckName === "chance" ? "Peachtree Chance" : "Hotlanta Community";
   game.lastCard = `${deckLabel}: ${card.text}`;
+  selectSpace(player.position);
   game.revealedCards[deckName] = {
     deck: deckName,
     cardIndex,
@@ -999,6 +1034,7 @@ async function animateMove(player, steps) {
       player.cash += PASS_GO;
       log(`${player.name} passed Peachtree Street and collected $200.`);
     }
+    game.selectedSpaceIndex = player.position;
     game.status = `${player.name} is moving to ${board[player.position].name}.`;
     render();
     await wait(MOVE_STEP_MS);
@@ -1029,6 +1065,7 @@ function nearestSpace(from, kind) {
 
 function sendToTraffic(player) {
   player.position = 10;
+  game.selectedSpaceIndex = 10;
   player.inTraffic = true;
   player.trafficTurns = 0;
   game.doubles = 0;
@@ -1046,6 +1083,7 @@ function buyProperty(player, space) {
   log(`${player.name} bought ${space.name} for $${space.price}.`);
   game.status = `${player.name} bought ${space.name} for $${space.price}.`;
   game.phase = "resolve";
+  selectSpace(space.index);
   render();
   saveGame(false);
 }
@@ -1373,6 +1411,7 @@ function endTurn() {
     game.dice = [0, 0];
     game.doubles = 0;
     game.status = `${activePlayer().name}, roll to play.`;
+    game.selectedSpaceIndex = activePlayer().position;
     if (activePlayer().inTraffic) game.status = trafficRollStatus(activePlayer());
   }
   botBuild(activePlayer());
@@ -1475,6 +1514,7 @@ function buildImprovement(player, index) {
   if (!canBuildImprovement(player, index)) return;
   player.cash -= space.houseCost;
   game.improvements[index] = (game.improvements[index] || 0) + 1;
+  selectSpace(index);
   log(`${player.name} built ${game.improvements[index] === 5 ? "a tower" : "a condo"} on ${space.name}.`);
   saveGame(false);
 }
@@ -1504,6 +1544,7 @@ function mortgageProperty(player, index) {
   const space = board[index];
   game.mortgaged[index] = true;
   game.improvements[index] = 0;
+  selectSpace(index);
   player.cash += space.mortgage;
   log(`${player.name} mortgaged ${space.name}.`);
   saveGame(false);
@@ -1515,6 +1556,7 @@ function unmortgageProperty(player, index) {
   if (game.owners[index] !== player.id || player.cash < cost) return;
   player.cash -= cost;
   delete game.mortgaged[index];
+  selectSpace(index);
   log(`${player.name} unmortgaged ${space.name}.`);
   saveGame(false);
 }
@@ -1750,6 +1792,71 @@ function setPanelTab(tab) {
   if (!tab) return;
   currentPanelTab = tab;
   syncPanelTabs();
+}
+
+function selectSpace(index, openPanel = false) {
+  if (!game || !Number.isInteger(index)) return;
+  game.selectedSpaceIndex = index;
+  if (openPanel) setPanelTab("space");
+}
+
+function currentSelectedSpaceIndex() {
+  return Number.isInteger(game?.selectedSpaceIndex) ? game.selectedSpaceIndex : activePlayer()?.position || 0;
+}
+
+function renderSpaceDetailActions(space, owner) {
+  if (!space.price) return "";
+  const player = activePlayer();
+  const actions = [];
+  const notes = [];
+  if (owner?.id === player.id && !player.bankrupt) {
+    if (space.kind === "deed") {
+      const buildReason = buildBlockedReason(player, space.index);
+      if (!buildReason) actions.push(`<button type="button" data-space-build="${space.index}">Build ${game.improvements[space.index] >= 4 ? "Tower" : "Condo"} $${space.houseCost}</button>`);
+      else if (ownsMonopoly(player.id, space.group)) notes.push(buildReason);
+    }
+    if (game.mortgaged[space.index]) actions.push(`<button type="button" data-space-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>`);
+    else actions.push(`<button type="button" data-space-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`);
+  }
+  if (game.phase === "buy" && player.position === space.index && !owner && !player.isBot) {
+    actions.push(`<button type="button" data-space-buy="${space.index}">Buy for $${space.price}</button>`);
+    actions.push(`<button type="button" data-space-auction="${space.index}">Auction</button>`);
+  }
+  if (!actions.length && !notes.length) return "";
+  return `
+    <div class="detail-actions">
+      ${actions.join("")}
+      ${notes.map((note) => `<p class="detail-note">${escapeHtml(note)}</p>`).join("")}
+    </div>
+  `;
+}
+
+function wireSpaceDetailActions(index) {
+  const buildButton = els.spaceDetail.querySelector("[data-space-build]");
+  const mortgageButton = els.spaceDetail.querySelector("[data-space-mortgage]");
+  const unmortgageButton = els.spaceDetail.querySelector("[data-space-unmortgage]");
+  const buyButton = els.spaceDetail.querySelector("[data-space-buy]");
+  const auctionButton = els.spaceDetail.querySelector("[data-space-auction]");
+  if (buildButton) buildButton.addEventListener("click", () => {
+    buildImprovement(activePlayer(), Number(buildButton.dataset.spaceBuild));
+    render();
+  });
+  if (mortgageButton) mortgageButton.addEventListener("click", () => {
+    mortgageProperty(activePlayer(), Number(mortgageButton.dataset.spaceMortgage));
+    render();
+  });
+  if (unmortgageButton) unmortgageButton.addEventListener("click", () => {
+    unmortgageProperty(activePlayer(), Number(unmortgageButton.dataset.spaceUnmortgage));
+    render();
+  });
+  if (buyButton) buyButton.addEventListener("click", () => handleAction("buy"));
+  if (auctionButton) auctionButton.addEventListener("click", () => handleAction("auction"));
+  els.board.querySelectorAll("[data-center-action]").forEach((buttonEl) => {
+    buttonEl.addEventListener("click", () => handleAction(buttonEl.dataset.centerAction));
+  });
+  els.board.querySelectorAll(".center-turn-actions [data-action]").forEach((buttonEl) => {
+    buttonEl.addEventListener("click", () => handleAction(buttonEl.dataset.action));
+  });
 }
 
 function syncPanelTabs() {
@@ -2001,11 +2108,138 @@ function log(message) {
 }
 
 function saveGame(showMessage = true) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(game));
+  persistGameState(game);
   if (showMessage) {
-    log("Game saved for offline play on this device.");
+    log(`Saved ${game.title} for offline play on this device.`);
     render();
   }
+}
+
+function createSaveId() {
+  return `save-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function saveStorageKey(id) {
+  return `${SAVE_SLOT_PREFIX}${id}`;
+}
+
+function readSaveIndex() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(SAVE_INDEX_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSaveIndex(index) {
+  localStorage.setItem(SAVE_INDEX_KEY, JSON.stringify(index));
+}
+
+function buildSaveMeta(state) {
+  return {
+    id: state.saveId,
+    title: state.title || "ATL Empire",
+    updatedAt: Date.now(),
+    currentPlayer: state.players?.[state.current]?.name || "Player 1",
+    playerSummary: (state.players || []).map((player) => player.name).join(", ")
+  };
+}
+
+function persistGameState(state) {
+  if (!state.saveId) state.saveId = createSaveId();
+  localStorage.setItem(saveStorageKey(state.saveId), JSON.stringify(state));
+  const index = readSaveIndex().filter((entry) => entry.id !== state.saveId);
+  index.unshift(buildSaveMeta(state));
+  writeSaveIndex(index);
+}
+
+function migrateLegacySave() {
+  const legacy = localStorage.getItem(STORAGE_KEY);
+  if (!legacy) return;
+  try {
+    const parsed = JSON.parse(legacy);
+    if (parsed?.players) {
+      const restored = hydrate(parsed);
+      persistGameState(restored);
+    }
+  } catch {}
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function renderSavedGamesList() {
+  if (!els.savedGamesPanel || !els.savedGamesList) return;
+  const saves = readSaveIndex().filter((entry) => localStorage.getItem(saveStorageKey(entry.id)));
+  if (!saves.length) {
+    els.savedGamesPanel.classList.add("hidden");
+    els.savedGamesList.innerHTML = "";
+    return;
+  }
+  els.savedGamesPanel.classList.remove("hidden");
+  els.savedGamesList.innerHTML = saves.map((save) => `
+    <article class="saved-game-card">
+      <div class="saved-game-copy">
+        <strong>${escapeHtml(save.title)}</strong>
+        <span>${escapeHtml(save.playerSummary || "")}</span>
+        <span>Current turn: ${escapeHtml(save.currentPlayer || "Player 1")} · Updated ${new Date(save.updatedAt).toLocaleString()}</span>
+      </div>
+      <div class="saved-game-actions">
+        <button type="button" data-save-load="${save.id}">Load</button>
+        <button type="button" data-save-edit="${save.id}">Edit</button>
+        <button type="button" data-save-delete="${save.id}">Delete</button>
+      </div>
+    </article>
+  `).join("");
+}
+
+function handleSavedGamesClick(event) {
+  const loadButton = event.target.closest("[data-save-load]");
+  const editButton = event.target.closest("[data-save-edit]");
+  const deleteButton = event.target.closest("[data-save-delete]");
+  if (loadButton) loadSavedGame(loadButton.dataset.saveLoad);
+  if (editButton) renameSavedGame(editButton.dataset.saveEdit);
+  if (deleteButton) deleteSavedGame(deleteButton.dataset.saveDelete);
+}
+
+function loadSavedGame(saveId) {
+  const raw = localStorage.getItem(saveStorageKey(saveId));
+  if (!raw) {
+    deleteSavedGame(saveId, false);
+    renderSavedGamesList();
+    return;
+  }
+  try {
+    game = hydrate(JSON.parse(raw));
+    game.saveId = saveId;
+    showGame();
+    log(`Loaded ${game.title}.`);
+    render();
+    maybeRunBot();
+  } catch {
+    deleteSavedGame(saveId, false);
+    renderSavedGamesList();
+  }
+}
+
+function renameSavedGame(saveId) {
+  const raw = localStorage.getItem(saveStorageKey(saveId));
+  if (!raw) return;
+  try {
+    const state = JSON.parse(raw);
+    const nextTitle = window.prompt("Rename saved game", state.title || "ATL Empire");
+    if (!nextTitle) return;
+    state.title = nextTitle.trim() || "ATL Empire";
+    state.saveId = saveId;
+    persistGameState(state);
+    renderSavedGamesList();
+  } catch {}
+}
+
+function deleteSavedGame(saveId, askFirst = true) {
+  if (askFirst && !window.confirm("Delete this saved game?")) return;
+  localStorage.removeItem(saveStorageKey(saveId));
+  writeSaveIndex(readSaveIndex().filter((entry) => entry.id !== saveId));
+  renderSavedGamesList();
 }
 
 function shuffle(items) {
