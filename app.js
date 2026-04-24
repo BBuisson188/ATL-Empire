@@ -210,7 +210,7 @@ const els = {
 };
 
 let modalKind = "default";
-let currentPanelTab = "turn";
+let currentPanelTab = "space";
 
 init();
 
@@ -232,6 +232,10 @@ function init() {
   els.playMode.addEventListener("click", togglePlayMode);
   els.panelTabs.forEach((buttonEl) => {
     buttonEl.addEventListener("click", () => setPanelTab(buttonEl.dataset.panelTab));
+  });
+  window.addEventListener("resize", () => {
+    normalizePanelTab();
+    syncPanelTabs();
   });
   els.newGame.addEventListener("click", () => {
     location.reload();
@@ -405,6 +409,7 @@ function showGame() {
 }
 
 function render() {
+  normalizePanelTab();
   syncPanelTabs();
   renderBoard();
   renderPlayers();
@@ -1800,7 +1805,18 @@ function clearRevealedCards() {
 function setPanelTab(tab) {
   if (!tab) return;
   currentPanelTab = tab;
+  normalizePanelTab();
   syncPanelTabs();
+}
+
+function isTabletBoardLayout() {
+  return window.innerWidth <= 1400;
+}
+
+function normalizePanelTab() {
+  if (isTabletBoardLayout() && currentPanelTab === "turn") {
+    currentPanelTab = "space";
+  }
 }
 
 function selectSpace(index, openPanel = false) {

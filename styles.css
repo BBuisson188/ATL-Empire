@@ -1940,12 +1940,14 @@ select {
   }
 
   .board-center {
-    gap: 12px;
-    padding: clamp(12px, 2vw, 22px);
+    align-content: start;
+    gap: 8px;
+    padding: 10px;
   }
 
   .center-frame {
-    gap: 10px;
+    gap: 8px;
+    padding-top: 0;
   }
 
   .center-kicker {
@@ -1957,33 +1959,107 @@ select {
   }
 
   .center-tagline {
-    font-size: clamp(0.82rem, 1.4vw, 0.95rem);
-    max-width: 520px;
+    display: none;
   }
 
   .deck-row {
-    gap: 10px;
-    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "turn turn"
+      "chance community";
+    align-items: stretch;
   }
 
   .deck-stack {
-    min-height: clamp(150px, 21vw, 220px);
+    min-height: 132px;
+  }
+
+  .chance-stack {
+    grid-area: chance;
+  }
+
+  .community-stack {
+    grid-area: community;
   }
 
   .center-turn-console {
-    order: -1;
+    grid-area: turn;
+    min-width: 0;
+    gap: 8px;
+    padding: 10px 12px;
   }
 
   .deck-stack-face {
-    padding: 10px 10px 12px;
+    gap: 4px;
+    padding: 8px 8px 10px;
   }
 
   .deck-stack-art {
-    height: clamp(64px, 8vw, 86px);
+    width: min(100%, 120px);
+    height: 48px;
   }
 
   .deck-back strong {
-    font-size: clamp(0.96rem, 1.6vw, 1.35rem);
+    font-size: 1.02rem;
+  }
+
+  .deck-back > span:last-of-type,
+  .deck-back > span:nth-last-child(2) {
+    font-size: 0.58rem;
+  }
+
+  .center-brand-image,
+  .center-rail {
+    display: none;
+  }
+
+  .center-turn-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+
+  .center-spotlight,
+  .center-note {
+    gap: 4px;
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .center-spotlight span,
+  .center-note span,
+  .center-turn-status {
+    font-size: 0.92rem;
+  }
+
+  .center-spotlight strong,
+  .center-note strong {
+    font-size: 1rem;
+  }
+
+  .center-spotlight em {
+    font-size: 0.88rem;
+  }
+
+  .center-roll-button {
+    min-width: 132px;
+    min-height: 58px;
+    padding: 12px 16px;
+    font-size: 0.94rem;
+  }
+
+  .center-turn-status {
+    min-height: 0;
+  }
+
+  .center-turn-actions {
+    justify-content: center;
+  }
+
+  .center-turn-actions button {
+    min-height: 38px;
+    padding: 8px 12px;
+    border-radius: 10px;
   }
 
   .center-dice span {
@@ -1997,24 +2073,16 @@ select {
     gap: 10px;
   }
 
-  .center-spotlight,
-  .center-note,
-  .center-rail {
-    padding: 10px 12px;
-    border-radius: 14px;
-  }
-
-  .center-note strong,
-  .center-spotlight strong {
-    font-size: clamp(0.92rem, 1.4vw, 1.1rem);
-  }
-
   .panel-tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     max-width: 980px;
     margin: 0 auto;
+  }
+
+  .panel-tab[data-panel-tab="turn"] {
+    display: none;
   }
 
   .panel-tab.active {
@@ -2026,6 +2094,10 @@ select {
   .side-panel {
     max-width: 980px;
     margin: 0 auto;
+  }
+
+  .side-panel > [data-panel-section="turn"] {
+    display: none !important;
   }
 
   .side-panel > section {
@@ -2066,12 +2138,71 @@ select {
   }
 
   .board {
-    width: min(96vw, 900px);
-    min-width: 640px;
+    width: min(calc(100vw - 20px), 900px);
+    min-width: 0;
+    gap: 3px;
+    padding: 8px;
   }
 
+  .board-center {
+    padding: 8px;
+  }
+
+  .deck-row {
+    gap: 6px;
+  }
+
+  .deck-stack {
+    min-height: 104px;
+    border-radius: 16px;
+  }
+
+  .deck-stack-face {
+    padding: 7px 7px 8px;
+  }
+
+  .deck-stack-art {
+    width: min(100%, 94px);
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  .deck-back strong {
+    font-size: 0.9rem;
+  }
+
+  .center-turn-console {
+    padding: 8px 10px;
+    border-radius: 16px;
+  }
+
+  .center-turn-head {
+    grid-template-columns: 1fr;
+  }
+
+  .center-roll-bay,
+  .center-turn-actions {
+    justify-items: stretch;
+    justify-content: stretch;
+  }
+
+  .center-roll-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 50px;
+  }
+
+  .center-turn-actions button {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .center-status-row-compact {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .panel-tabs,
   .side-panel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-width: min(900px, calc(100vw - 20px));
   }
 }
 
