@@ -437,13 +437,6 @@ function renderBoard() {
           <span>Lottery Pot</span>
           <strong>$${game.lotteryPot}</strong>
         </div>
-        <div class="center-note">
-          <span>Latest Card</span>
-          <strong>${game.lastCard ? escapeHtml(game.lastCard) : "Waiting for the next draw."}</strong>
-        </div>
-      </div>
-      <div class="center-rail">
-        <span>The board center now handles rolls, turn flow, auctions, and debt decisions.</span>
       </div>
     </div>
     ${game.auction ? auctionDockHtml() : ""}
