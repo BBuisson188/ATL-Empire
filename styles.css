@@ -1912,12 +1912,16 @@ select {
 @media (max-width: 1400px) {
   .game-screen {
     padding: 10px 10px 160px;
+    display: grid;
+    gap: 12px;
   }
 
   .top-bar {
     justify-content: center;
-    margin: 0;
-    max-width: none;
+    order: 2;
+    margin: 0 auto;
+    max-width: 980px;
+    width: 100%;
     padding: 0;
     border: 0;
     background: transparent;
@@ -1929,6 +1933,7 @@ select {
   }
 
   .table-layout {
+    order: 1;
     grid-template-columns: 1fr;
     gap: 12px;
   }
@@ -2071,10 +2076,9 @@ select {
     font-size: 0.86rem;
   }
 
-  .center-dice span {
+  .center-dice .die-face {
     width: clamp(42px, 6vw, 60px);
     border-radius: 14px;
-    font-size: clamp(1.2rem, 2.8vw, 2rem);
   }
 
   .center-status-row {
@@ -2088,13 +2092,10 @@ select {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
     max-width: 980px;
+    width: 100%;
     margin: 0 auto;
-    position: fixed;
-    left: 50%;
-    bottom: 88px;
-    z-index: 42;
-    width: min(560px, calc(100vw - 24px));
-    transform: translateX(-50%);
+    position: static;
+    transform: none;
   }
 
   .panel-tab[data-panel-tab="turn"] {
@@ -2110,6 +2111,18 @@ select {
   .side-panel {
     max-width: 980px;
     margin: 0 auto;
+  }
+
+  .board-wrap {
+    order: 1;
+  }
+
+  .side-panel {
+    order: 2;
+  }
+
+  .panel-tabs {
+    order: 3;
   }
 
   .side-panel > [data-panel-section="turn"] {
@@ -2148,18 +2161,15 @@ select {
   }
 
   .top-actions {
-    position: fixed;
-    left: 50%;
-    bottom: 18px;
-    z-index: 43;
-    width: min(560px, calc(100vw - 24px));
+    position: static;
+    width: 100%;
     justify-content: center;
     padding: 8px;
     border-radius: 18px;
     border: 1px solid rgba(255, 235, 195, 0.16);
     background: linear-gradient(145deg, rgba(17, 50, 42, 0.96), rgba(12, 31, 27, 0.96));
     box-shadow: 0 20px 40px rgba(11, 18, 16, 0.28);
-    transform: translateX(-50%);
+    transform: none;
   }
 
   .top-actions button {
@@ -2185,7 +2195,14 @@ select {
   }
 
   .deck-row {
-    gap: 6px;
+    gap: 8px;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "turn turn"
+      ". ."
+      "chance community";
+    min-height: 420px;
+    align-content: stretch;
   }
 
   .deck-stack {
@@ -2210,6 +2227,7 @@ select {
   .center-turn-console {
     padding: 7px 9px;
     border-radius: 16px;
+    align-self: start;
   }
 
   .center-turn-head {
@@ -2233,7 +2251,11 @@ select {
   }
 
   .center-status-row-compact {
-    grid-template-columns: 1fr 1fr;
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    grid-template-columns: minmax(0, 140px);
+    z-index: 4;
   }
 
   .panel-tabs,
@@ -2243,12 +2265,54 @@ select {
 
   .panel-tabs {
     width: min(520px, calc(100vw - 20px));
-    bottom: 82px;
   }
 
   .top-actions {
     width: min(520px, calc(100vw - 20px));
-    bottom: 14px;
+  }
+
+  .center-brand-image {
+    display: block;
+    top: 56%;
+    width: min(260px, 46%);
+    opacity: 0.17;
+    transform: translate(-50%, -50%);
+  }
+
+  .center-note {
+    padding: 8px 12px;
+    border-radius: 14px;
+    background: rgba(255, 251, 242, 0.86);
+  }
+
+  .center-note span {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+  }
+
+  .center-note strong {
+    font-size: 0.98rem;
+  }
+
+  .center-dice {
+    gap: 10px;
+  }
+
+  .center-dice .die-face {
+    width: 54px;
+    border-radius: 16px;
+  }
+
+  .center-turn-actions {
+    justify-content: stretch;
+  }
+
+  .center-turn-actions button {
+    flex: 1 1 calc(50% - 8px);
+  }
+
+  .top-bar {
+    max-width: min(900px, calc(100vw - 20px));
   }
 }
 

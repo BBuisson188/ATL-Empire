@@ -11,14 +11,14 @@ const MOVE_STEP_MS = 1000;
 const playerColors = ["#2563eb", "#dc2626", "#16a34a", "#d97706"];
 
 const tokens = [
-  { id: "peach", name: "Peach", asset: "peach-edgeclean.png" },
-  { id: "peanut", name: "Peanut", asset: "peanut-edgeclean.png" },
-  { id: "coke", name: "Coke Bottle", asset: "coke-edgeclean.png" },
-  { id: "jet", name: "Delta Jet", asset: "jet-edgeclean.png" },
-  { id: "camera", name: "Movie Camera", asset: "camera-edgeclean.png" },
-  { id: "record", name: "Vinyl Record", asset: "record-edgeclean.png" },
-  { id: "torch", name: "Olympic Torch", asset: "torch-edgeclean.png" },
-  { id: "sandwich", name: "Chicken Sandwich", asset: "sandwich-edgeclean.png" }
+  { id: "peach", name: "Peach", asset: "peach.png" },
+  { id: "peanut", name: "Peanut", asset: "peanut.png" },
+  { id: "coke", name: "Coke Bottle", asset: "coke.png" },
+  { id: "jet", name: "Delta Jet", asset: "jet.png" },
+  { id: "camera", name: "Movie Camera", asset: "camera.png" },
+  { id: "record", name: "Vinyl Record", asset: "record.png" },
+  { id: "torch", name: "Olympic Torch", asset: "torch.png" },
+  { id: "sandwich", name: "Chicken Sandwich", asset: "sandwich.png" }
 ];
 
 const botProfiles = {
