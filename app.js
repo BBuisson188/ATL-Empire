@@ -192,6 +192,8 @@ const els = {
   playersList: document.getElementById("players-list"),
   spaceDetail: document.getElementById("space-detail"),
   gameLog: document.getElementById("game-log"),
+  panelTabs: [...document.querySelectorAll("[data-panel-tab]")],
+  panelSections: [...document.querySelectorAll("[data-panel-section]")],
   modal: document.getElementById("modal"),
   modalContent: document.getElementById("modal-content"),
   playMode: document.getElementById("play-mode"),
@@ -204,6 +206,7 @@ const els = {
 };
 
 let modalKind = "default";
+let currentPanelTab = "turn";
 
 init();
 
@@ -220,6 +223,9 @@ function init() {
   els.setupForm.addEventListener("submit", startGameFromSetup);
   els.saveGame.addEventListener("click", saveGame);
   els.playMode.addEventListener("click", togglePlayMode);
+  els.panelTabs.forEach((buttonEl) => {
+    buttonEl.addEventListener("click", () => setPanelTab(buttonEl.dataset.panelTab));
+  });
   els.newGame.addEventListener("click", () => {
     localStorage.removeItem(STORAGE_KEY);
     location.reload();
@@ -389,6 +395,7 @@ function showGame() {
 }
 
 function render() {
+  syncPanelTabs();
   renderBoard();
   renderPlayers();
   renderTurn();
@@ -403,8 +410,7 @@ function renderBoard() {
   center.className = "board-center";
   center.innerHTML = `
     <div class="center-frame">
-      <p class="center-kicker">Atlanta Property Trading Game</p>
-      <h2 class="center-title">${escapeHtml(game.title)}</h2>
+      <img class="center-brand-image" src="assets/branding/atl-empire-board-logo.png" alt="ATL Empire board logo">
       <p class="center-tagline">Build districts, dodge traffic, and turn the city into your empire.</p>
       <div class="deck-row">
         ${renderDeckStack("chance")}
@@ -454,6 +460,7 @@ function renderBoard() {
     `;
     cell.addEventListener("click", (event) => {
       event.stopPropagation();
+      setPanelTab("space");
       renderSpaceDetail(space.index);
       showSpacePopover(space.index, cell);
     });
@@ -1739,6 +1746,21 @@ function clearRevealedCards() {
   game.revealedCards = { chance: null, community: null };
 }
 
+function setPanelTab(tab) {
+  if (!tab) return;
+  currentPanelTab = tab;
+  syncPanelTabs();
+}
+
+function syncPanelTabs() {
+  els.panelTabs.forEach((buttonEl) => {
+    buttonEl.classList.toggle("active", buttonEl.dataset.panelTab === currentPanelTab);
+  });
+  els.panelSections.forEach((sectionEl) => {
+    sectionEl.classList.toggle("active-panel", sectionEl.dataset.panelSection === currentPanelTab);
+  });
+}
+
 function renderDeckStack(deckName) {
   const meta = deckMeta(deckName);
   const revealed = game.revealedCards?.[deckName];
@@ -1759,6 +1781,7 @@ function renderDeckStack(deckName) {
 }
 
 function renderDeckDetail(deckName) {
+  setPanelTab("space");
   const meta = deckMeta(deckName);
   const revealed = game.revealedCards?.[deckName];
   if (revealed) {
