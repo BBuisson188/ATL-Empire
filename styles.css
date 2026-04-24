@@ -2195,59 +2195,67 @@ select {
   }
 
   .deck-row {
-    gap: 8px;
+    gap: 10px;
     grid-template-rows: auto 1fr auto;
     grid-template-areas:
       "turn turn"
       ". ."
       "chance community";
-    min-height: 420px;
+    min-height: 460px;
     align-content: stretch;
   }
 
   .deck-stack {
-    min-height: 88px;
+    min-height: 78px;
     border-radius: 16px;
+    align-self: end;
   }
 
   .deck-stack-face {
-    padding: 6px 6px 7px;
+    padding: 5px 5px 6px;
   }
 
   .deck-stack-art {
-    width: min(100%, 74px);
-    height: 28px;
-    border-radius: 10px;
+    width: min(100%, 66px);
+    height: 24px;
+    border-radius: 8px;
   }
 
   .deck-back strong {
-    font-size: 0.78rem;
+    font-size: 0.72rem;
+  }
+
+  .deck-back > span:last-of-type,
+  .deck-back > span:nth-last-child(2) {
+    font-size: 0.48rem;
   }
 
   .center-turn-console {
-    padding: 7px 9px;
+    padding: 6px 8px;
     border-radius: 16px;
     align-self: start;
   }
 
   .center-turn-head {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
   }
 
   .center-roll-bay,
   .center-turn-actions {
-    justify-items: stretch;
-    justify-content: stretch;
+    justify-items: center;
+    justify-content: center;
   }
 
   .center-roll-button {
-    width: 100%;
-    min-width: 0;
-    min-height: 50px;
+    width: auto;
+    min-width: 124px;
+    min-height: 46px;
+    padding: 10px 12px;
   }
 
   .center-turn-actions button {
-    flex: 1 1 calc(50% - 8px);
+    flex: 0 1 auto;
   }
 
   .center-status-row-compact {
@@ -2273,9 +2281,9 @@ select {
 
   .center-brand-image {
     display: block;
-    top: 56%;
-    width: min(260px, 46%);
-    opacity: 0.17;
+    top: 58%;
+    width: min(280px, 50%);
+    opacity: 0.2;
     transform: translate(-50%, -50%);
   }
 
@@ -2299,16 +2307,16 @@ select {
   }
 
   .center-dice .die-face {
-    width: 54px;
+    width: 48px;
     border-radius: 16px;
   }
 
   .center-turn-actions {
-    justify-content: stretch;
+    justify-content: center;
   }
 
   .center-turn-actions button {
-    flex: 1 1 calc(50% - 8px);
+    min-width: 112px;
   }
 
   .top-bar {
