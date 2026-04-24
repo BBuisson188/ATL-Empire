@@ -239,7 +239,9 @@ function init() {
     els.savedGamesList.addEventListener("click", handleSavedGamesClick);
   }
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+    navigator.serviceWorker.register("./service-worker.js?v=12", { updateViaCache: "none" }).then((registration) => {
+      registration.update().catch(() => {});
+    }).catch(() => {});
   }
 }
 
