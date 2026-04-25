@@ -15,7 +15,8 @@ const tokens = [
   { id: "peanut", name: "Peanut", asset: "peanut-edgeclean.png" },
   { id: "coke", name: "Coke Bottle", asset: "coke-edgeclean.png" },
   { id: "jet", name: "Delta Jet", asset: "jet-edgeclean.png" },
-  { id: "camera", name: "Home Depot Bucket", asset: "bucket-edgeclean.svg" },
+  { id: "camera", name: "Movie Camera", asset: "camera-edgeclean.png" },
+  { id: "bucket", name: "Home Depot Bucket", asset: "bucket-edgeclean.png" },
   { id: "record", name: "Vinyl Record", asset: "record-edgeclean.png" },
   { id: "torch", name: "Olympic Torch", asset: "torch-edgeclean.png" },
   { id: "sandwich", name: "Chicken Sandwich", asset: "sandwich-edgeclean.png" }
