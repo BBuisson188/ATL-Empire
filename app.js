@@ -428,16 +428,14 @@ function renderBoard() {
     <div class="center-frame">
       <img class="center-brand-image" src="assets/branding/atl-empire-board-logo-small.png" alt="ATL Empire board logo">
       <p class="center-tagline">Build districts, dodge traffic, and turn the city into your empire.</p>
+      <div class="lottery-pot-badge">
+        <span>Lottery Pot</span>
+        <strong>$${game.lotteryPot}</strong>
+      </div>
       <div class="deck-row">
         ${renderDeckStack("chance")}
         ${renderCenterTurnConsole(currentPlayer)}
         ${renderDeckStack("community")}
-      </div>
-      <div class="center-status-row center-status-row-compact">
-        <div class="center-note">
-          <span>Lottery Pot</span>
-          <strong>$${game.lotteryPot}</strong>
-        </div>
       </div>
     </div>
     ${game.auction ? auctionDockHtml() : ""}
@@ -691,7 +689,6 @@ function togglePlayMode() {
   game.status = game.autoPlay ? "Autoplay is on. Bots will move automatically." : "Manual mode is on. Use Next to step through bot turns and payments.";
   updatePlayModeButton();
   render();
-  saveGame(false);
   if (game.autoPlay) maybeRunBot();
 }
 
@@ -743,7 +740,6 @@ async function finishRoll(playerId, d1, d2) {
   if (player.inTraffic) {
     await handleTrafficRoll(player, doubles, total);
     render();
-    saveGame(false);
     maybeRunBot();
     return;
   }
@@ -753,14 +749,12 @@ async function finishRoll(playerId, d1, d2) {
     sendToTraffic(player);
     game.phase = "resolve";
     render();
-    saveGame(false);
     maybeRunBot();
     return;
   }
   await animateMove(player, total);
   await resolveLanding(player);
   render();
-  saveGame(false);
   maybeRunBot();
 }
 
@@ -819,7 +813,6 @@ function exitTrafficBeforeRoll(method) {
   player.inTraffic = false;
   player.trafficTurns = 0;
   render();
-  saveGame(false);
   rollDice();
 }
 
@@ -843,7 +836,6 @@ async function resolveTrafficExit(method) {
   await animateMove(player, exit.total);
   await resolveLanding(player);
   render();
-  saveGame(false);
   maybeRunBot();
 }
 
@@ -959,7 +951,6 @@ async function resolvePending() {
   if (pending.type === "goTraffic") sendToTraffic(player);
   if (game.phase !== "buy" && game.phase !== "over") game.phase = "resolve";
   render();
-  saveGame(false);
 }
 
 async function drawCard(player, deckName) {
@@ -1093,7 +1084,6 @@ function buyProperty(player, space) {
   game.phase = "resolve";
   selectSpace(space.index);
   render();
-  saveGame(false);
 }
 
 function auctionProperty(space) {
@@ -1126,7 +1116,6 @@ function resolveAutoAuction(space) {
   }
   game.phase = "resolve";
   render();
-  saveGame(false);
 }
 
 function openAuctionModal(space) {
@@ -1225,7 +1214,6 @@ function finishAuction() {
   game.phase = "resolve";
   closeModal();
   render();
-  saveGame(false);
   maybeRunBot();
 }
 
@@ -1372,7 +1360,6 @@ function finishDebtIfSolved(closeWhenDone = true) {
   game.status = `${player.name} raised enough cash.`;
   if (closeWhenDone) closeModal();
   render();
-  saveGame(false);
 }
 
 function bankruptPlayer(player) {
@@ -1389,7 +1376,6 @@ function bankruptPlayer(player) {
   log(`${player.name} declared bankruptcy. Their properties returned to the bank.`);
   closeModal();
   render();
-  saveGame(false);
 }
 
 function autoMortgage(player) {
@@ -1524,7 +1510,6 @@ function buildImprovement(player, index) {
   game.improvements[index] = (game.improvements[index] || 0) + 1;
   selectSpace(index);
   log(`${player.name} built ${game.improvements[index] === 5 ? "a tower" : "a condo"} on ${space.name}.`);
-  saveGame(false);
 }
 
 function canBuildImprovement(player, index) {
@@ -1555,7 +1540,6 @@ function mortgageProperty(player, index) {
   selectSpace(index);
   player.cash += space.mortgage;
   log(`${player.name} mortgaged ${space.name}.`);
-  saveGame(false);
 }
 
 function unmortgageProperty(player, index) {
@@ -1566,7 +1550,6 @@ function unmortgageProperty(player, index) {
   delete game.mortgaged[index];
   selectSpace(index);
   log(`${player.name} unmortgaged ${space.name}.`);
-  saveGame(false);
 }
 
 function openTradeModal(player) {
@@ -1628,7 +1611,6 @@ function proposeTrade(from, to) {
     }
     closeModal();
     render();
-    saveGame(false);
     return;
   }
   renderTradeReview(offer);
@@ -1650,7 +1632,6 @@ function renderTradeReview(offer) {
     applyTrade(offer);
     closeModal();
     render();
-    saveGame(false);
   });
   document.getElementById("reject-trade").addEventListener("click", () => {
     log(`${to.name} rejected ${from.name}'s trade proposal.`);
