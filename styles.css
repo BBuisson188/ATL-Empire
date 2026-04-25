@@ -488,21 +488,21 @@ select {
 
 .deck-row .deck-stack {
   position: absolute;
-  bottom: clamp(96px, 9vw, 142px);
+  bottom: clamp(168px, 14vw, 224px);
   z-index: 2;
-  width: clamp(148px, 17vw, 236px);
+  width: clamp(132px, 15vw, 206px);
   aspect-ratio: 7 / 5;
-  transform-origin: 50% 100%;
+  transform-origin: 50% 50%;
 }
 
 .deck-row .chance-stack {
-  left: clamp(96px, 10vw, 152px);
-  transform: rotate(-45deg);
+  left: clamp(112px, 11vw, 176px);
+  transform: rotate(45deg);
 }
 
 .deck-row .community-stack {
-  right: clamp(96px, 10vw, 152px);
-  transform: rotate(45deg);
+  right: clamp(112px, 11vw, 176px);
+  transform: rotate(-45deg);
 }
 
 .deck-row .deck-stack:hover:not(:disabled) {
@@ -510,11 +510,11 @@ select {
 }
 
 .deck-row .chance-stack {
-  --deck-rotation: -45deg;
+  --deck-rotation: 45deg;
 }
 
 .deck-row .community-stack {
-  --deck-rotation: 45deg;
+  --deck-rotation: -45deg;
 }
 
 .center-status-row {
@@ -2048,16 +2048,16 @@ select {
   }
 
   .deck-row .deck-stack {
-    width: clamp(112px, 16vw, 150px);
-    bottom: clamp(76px, 9vw, 104px);
+    width: clamp(104px, 14vw, 136px);
+    bottom: clamp(128px, 13vw, 168px);
   }
 
   .deck-row .chance-stack {
-    left: clamp(58px, 8vw, 92px);
+    left: clamp(68px, 8vw, 104px);
   }
 
   .deck-row .community-stack {
-    right: clamp(58px, 8vw, 92px);
+    right: clamp(68px, 8vw, 104px);
   }
 
   .center-turn-console {
@@ -2273,8 +2273,8 @@ select {
   }
 
   .deck-row .deck-stack {
-    width: clamp(96px, 15vw, 128px);
-    bottom: clamp(64px, 8vw, 88px);
+    width: clamp(92px, 13vw, 116px);
+    bottom: clamp(108px, 12vw, 144px);
   }
 
   .deck-stack-face {
