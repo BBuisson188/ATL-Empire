@@ -7,7 +7,7 @@ const MAX_PLAYERS = 4;
 const STORAGE_KEY = "atlEmpireSave";
 const SAVE_INDEX_KEY = "atlEmpireSaveIndex";
 const SAVE_SLOT_PREFIX = "atlEmpireSave:";
-const MOVE_STEP_MS = 1000;
+const MOVE_STEP_MS = 500;
 const playerColors = ["#2563eb", "#dc2626", "#16a34a", "#d97706"];
 
 const tokens = [
@@ -385,10 +385,7 @@ function hydrate(saved) {
     trafficExit: saved.trafficExit || null,
     animating: false,
     movingPlayerId: null,
-    revealedCards: {
-      chance: saved.revealedCards?.chance || null,
-      community: saved.revealedCards?.community || null
-    },
+    revealedCards: { chance: null, community: null },
     saveId: saved.saveId || createSaveId(),
     selectedSpaceIndex: Number.isInteger(saved.selectedSpaceIndex) ? saved.selectedSpaceIndex : saved.players?.[saved.current || 0]?.position || 0
   };
@@ -438,7 +435,6 @@ function renderBoard() {
         ${renderDeckStack("community")}
       </div>
     </div>
-    ${game.auction ? auctionDockHtml() : ""}
     ${game.debt ? debtDockHtml() : ""}
   `;
   els.board.appendChild(center);
@@ -446,7 +442,7 @@ function renderBoard() {
     const owner = game.owners[space.index] ? playerById(game.owners[space.index]) : null;
     const cell = document.createElement("button");
     cell.type = "button";
-    cell.className = `space ${space.type} ${space.group || ""} ${boardRingClass(space.index)} pos-${space.index} ${owner ? "owned" : ""} ${game.mortgaged[space.index] ? "mortgaged" : ""}`;
+    cell.className = `space ${space.type} ${space.group || ""} ${space.deck || ""} ${boardRingClass(space.index)} pos-${space.index} ${owner ? "owned" : ""} ${game.mortgaged[space.index] ? "mortgaged" : ""}`;
     cell.style.setProperty("--group-color", groups[space.group]?.color || "#d6cab1");
     if (owner) cell.style.setProperty("--owner-color", owner.color);
     cell.innerHTML = `
@@ -484,6 +480,17 @@ function renderBoard() {
     event.stopPropagation();
     renderDebtModal();
   });
+}
+
+function updateBoardMotion() {
+  els.board.querySelectorAll(".space").forEach((cell) => {
+    const match = [...cell.classList].find((className) => className.startsWith("pos-"))?.match(/^pos-(\d+)$/);
+    if (!match) return;
+    const tokenSlot = cell.querySelector(".tokens-here");
+    if (tokenSlot) tokenSlot.innerHTML = tokensOn(Number(match[1]));
+  });
+  const statusEl = els.board.querySelector(".center-turn-status");
+  if (statusEl) statusEl.textContent = game.status || statusForCurrentTurn();
 }
 
 function auctionDockHtml() {
@@ -580,17 +587,29 @@ function rentSummary(space) {
 
 function deedRentRows(space) {
   if (space.kind !== "deed") return "";
+  const activeRent = activeDeedRentKey(space);
+  const rows = [
+    ["base", "Base rent", space.rent[0]],
+    ["set", "With color set", space.rent[0] * 2],
+    ["1", "1 condo", space.rent[1]],
+    ["2", "2 condos", space.rent[2]],
+    ["3", "3 condos", space.rent[3]],
+    ["4", "4 condos", space.rent[4]],
+    ["5", "Tower", space.rent[5]]
+  ];
   return `
     <div class="rent-table">
-      <span>Base rent</span><strong>$${space.rent[0]}</strong>
-      <span>With color set</span><strong>$${space.rent[0] * 2}</strong>
-      <span>1 condo</span><strong>$${space.rent[1]}</strong>
-      <span>2 condos</span><strong>$${space.rent[2]}</strong>
-      <span>3 condos</span><strong>$${space.rent[3]}</strong>
-      <span>4 condos</span><strong>$${space.rent[4]}</strong>
-      <span>Tower</span><strong>$${space.rent[5]}</strong>
+      ${rows.map(([key, label, amount]) => `<div class="rent-row ${key === activeRent ? "active" : ""}"><span>${label}</span><strong>$${amount}</strong></div>`).join("")}
     </div>
   `;
+}
+
+function activeDeedRentKey(space) {
+  const ownerId = game.owners[space.index];
+  if (!ownerId || game.mortgaged[space.index]) return "";
+  const improvements = game.improvements[space.index] || 0;
+  if (improvements > 0) return String(improvements);
+  return ownsMonopoly(ownerId, space.group) ? "set" : "base";
 }
 
 function renderLog() {
@@ -609,6 +628,7 @@ function handleAction(action) {
   if (action === "buyPeachPass") exitTrafficBeforeRoll("pay");
   if (action === "trafficExitPass") resolveTrafficExit("card");
   if (action === "trafficExitPay") resolveTrafficExit("pay");
+  if (action === "auctionPanel") renderAuctionModal();
   if (action === "roll") rollDice();
   if (action === "buy") buyProperty(player, board[player.position]);
   if (action === "auction") auctionProperty(board[player.position]);
@@ -650,6 +670,9 @@ function getTurnControls(player) {
   if (game.animating) {
     actions.push(button("Moving...", "noop", true));
   } else {
+    if (game.auction) {
+      diceHtml = `<button type="button" class="center-roll-button" data-center-action="auctionPanel">Auction</button>`;
+    }
     if (game.phase === "roll") {
       if (player.inTraffic && !player.isBot) {
         if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "usePeachPass"));
@@ -940,7 +963,6 @@ async function resolvePending() {
   }
   if (pending.type === "drawCard") {
     await drawCard(player, pending.data.deck);
-    game.status = game.lastCard;
   }
   if (pending.type === "collectLottery") {
     player.cash += game.lotteryPot;
@@ -949,7 +971,7 @@ async function resolvePending() {
     game.lotteryPot = 0;
   }
   if (pending.type === "goTraffic") sendToTraffic(player);
-  if (game.phase !== "buy" && game.phase !== "over") game.phase = "resolve";
+  if (!game.pending && game.phase !== "buy" && game.phase !== "over") game.phase = "resolve";
   render();
 }
 
@@ -962,7 +984,7 @@ async function drawCard(player, deckName) {
   const deckLabel = deckName === "chance" ? "Peachtree Chance" : "Hotlanta Community";
   game.lastCard = `${deckLabel}: ${card.text}`;
   selectSpace(player.position);
-  game.revealedCards[deckName] = {
+  const revealed = {
     deck: deckName,
     cardIndex,
     title: deckLabel,
@@ -970,29 +992,48 @@ async function drawCard(player, deckName) {
     action: card.action
   };
   log(`${player.name} drew ${game.lastCard}`);
-  render();
-  await wait(380);
+  showCardDrawModal(deckName, revealed);
   await applyCard(player, card.action);
+  if (player.isBot && game.autoPlay && modalKind === "card") {
+    render();
+    await wait(1400);
+    if (modalKind === "card") closeModal();
+  }
+}
+
+function showCardDrawModal(deckName, revealed) {
+  showModal(`
+    <section class="card-draw-modal">
+      ${deckRevealCardHtml(deckName, revealed)}
+      <div class="modal-actions"><button type="button" data-close>Done</button></div>
+    </section>
+  `, "card");
 }
 
 async function applyCard(player, action) {
   if (action.type === "advance") {
     const target = board.findIndex((space) => space.name === action.to);
-    await animateAdvanceTo(player, target);
+    advanceTo(player, target);
     await resolveLanding(player);
   }
   if (action.type === "nearest") {
     const target = nearestSpace(player.position, action.kind);
-    await animateAdvanceTo(player, target);
+    advanceTo(player, target);
     const space = board[target];
-    if (!game.owners[target]) game.phase = "buy";
-    else if (game.owners[target] !== player.id) payRent(player, space, action.multiplier);
+    if (!game.owners[target]) {
+      game.phase = "buy";
+      game.status = `${player.name} landed on ${space.name}. It is available for $${space.price}.`;
+      if (player.isBot && game.autoPlay) setTimeout(() => botBuyDecision(player, space), 450);
+    } else if (game.owners[target] !== player.id) {
+      payRent(player, space, action.multiplier);
+      game.status = `${player.name} paid rent for ${space.name}.`;
+    }
   }
   if (action.type === "collect") player.cash += action.amount;
   if (action.type === "pay") chargePlayer(player, action.amount, null, action.pot);
   if (action.type === "peachPass") player.peachPasses += 1;
   if (action.type === "moveRelative") {
-    await animateMove(player, action.amount);
+    movePlayer(player, action.amount);
     await resolveLanding(player);
   }
   if (action.type === "goTraffic") sendToTraffic(player);
@@ -1018,14 +1059,23 @@ function advanceTo(player, target) {
     log(`${player.name} passed Peachtree Street and collected $200.`);
   }
   player.position = target;
+  game.selectedSpaceIndex = target;
   log(`${player.name} advanced to ${board[target].name}.`);
+  game.status = `${player.name} advanced to ${board[target].name}.`;
 }
 
-async function animateMove(player, steps) {
+async function animateMove(player, steps, moveKind = "rolled") {
   if (!steps) return;
   game.animating = true;
   game.movingPlayerId = player.id;
   const direction = steps > 0 ? 1 : -1;
+  const target = (player.position + steps + board.length) % board.length;
+  game.status = moveKind === "rolled"
+    ? `${player.name} rolled ${Math.abs(steps)}. Land on ${board[target].name}.`
+    : moveKind === "advances"
+      ? `${player.name} advances to ${board[target].name}.`
+      : `${player.name} moves ${Math.abs(steps)}. Land on ${board[target].name}.`;
+  render();
   for (let step = 0; step < Math.abs(steps); step++) {
     const oldPosition = player.position;
     player.position = (player.position + direction + board.length) % board.length;
@@ -1034,20 +1084,13 @@ async function animateMove(player, steps) {
       log(`${player.name} passed Peachtree Street and collected $200.`);
     }
     game.selectedSpaceIndex = player.position;
-    game.status = `${player.name} is moving to ${board[player.position].name}.`;
-    render();
+    updateBoardMotion();
     await wait(MOVE_STEP_MS);
   }
   log(`${player.name} moved to ${board[player.position].name}.`);
   game.status = `${player.name} landed on ${board[player.position].name}.`;
   game.animating = false;
   game.movingPlayerId = null;
-}
-
-async function animateAdvanceTo(player, target) {
-  const steps = (target - player.position + board.length) % board.length;
-  if (!steps) return;
-  await animateMove(player, steps);
 }
 
 function wait(ms) {
@@ -1155,6 +1198,14 @@ function renderAuctionModal() {
     if (bidder.isBot) auctionBotAct(bidder);
     else auctionBid(bidder.id, Number(document.getElementById("auction-bid").value));
   });
+  if (bidder.isBot && game.autoPlay) {
+    setTimeout(() => {
+      const currentAuction = game.auction;
+      if (!currentAuction || !game.autoPlay) return;
+      const currentBidder = playerById(currentAuction.active[currentAuction.turn % currentAuction.active.length]);
+      if (currentBidder?.id === bidder.id) auctionBotAct(bidder);
+    }, 450);
+  }
 }
 
 function minimizeAuction() {
@@ -1473,6 +1524,10 @@ function openManageModal(player) {
     buildImprovement(player, Number(buttonEl.dataset.build));
     refreshManageModal(player);
   }));
+  els.modalContent.querySelectorAll("[data-sell-improvement]").forEach((buttonEl) => buttonEl.addEventListener("click", () => {
+    sellImprovement(player, Number(buttonEl.dataset.sellImprovement));
+    refreshManageModal(player);
+  }));
   els.modalContent.querySelectorAll("[data-mortgage]").forEach((buttonEl) => buttonEl.addEventListener("click", () => {
     mortgageProperty(player, Number(buttonEl.dataset.mortgage));
     refreshManageModal(player);
@@ -1493,11 +1548,15 @@ function manageRow(player, space) {
   const improvements = game.improvements[space.index] || 0;
   const buildReason = buildBlockedReason(player, space.index);
   const canBuild = !buildReason;
+  const sellReason = sellBlockedReason(player, space.index);
+  const canSell = !sellReason;
+  const sellValue = Math.floor((space.houseCost || 0) / 2);
   return `
     <article class="manage-row">
       <span class="chip" style="background:${groups[space.group].color}"></span>
       <div><strong>${space.name}</strong><span>${game.mortgaged[space.index] ? "Mortgaged" : improvements === 5 ? "Tower" : `${improvements} condo(s)`}</span></div>
       ${canBuild ? `<button data-build="${space.index}">Build $${space.houseCost}</button>` : space.kind === "deed" && ownsMonopoly(player.id, space.group) ? `<span class="build-note">${buildReason}</span>` : ""}
+      ${canSell ? `<button data-sell-improvement="${space.index}">Sell ${improvements === 5 ? "Tower" : "Condo"} $${sellValue}</button>` : ""}
       ${game.mortgaged[space.index] ? `<button data-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>` : `<button data-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`}
     </article>
   `;
@@ -1514,6 +1573,28 @@ function buildImprovement(player, index) {
 
 function canBuildImprovement(player, index) {
   return !buildBlockedReason(player, index);
+}
+
+function sellImprovement(player, index) {
+  if (sellBlockedReason(player, index)) return;
+  const space = board[index];
+  const improvements = game.improvements[index] || 0;
+  game.improvements[index] = improvements - 1;
+  player.cash += Math.floor(space.houseCost / 2);
+  selectSpace(index);
+  log(`${player.name} sold ${improvements === 5 ? "a tower" : "a condo"} on ${space.name}.`);
+}
+
+function sellBlockedReason(player, index) {
+  const space = board[index];
+  if (!space || space.kind !== "deed") return "Not sellable";
+  if (game.owners[index] !== player.id) return "Not owned";
+  const improvements = game.improvements[index] || 0;
+  if (improvements <= 0) return "No condos";
+  const groupSpaces = board.filter((candidate) => candidate.group === space.group && candidate.kind === "deed");
+  const max = Math.max(...groupSpaces.map((candidate) => game.improvements[candidate.index] || 0));
+  if (improvements < max) return "Sell evenly";
+  return "";
 }
 
 function buildBlockedReason(player, index) {
@@ -1589,7 +1670,7 @@ function tradeSideHtml(title, side, player) {
       <h3>${title}</h3>
       <label>Cash<input id="${side}-cash" type="number" min="0" max="${player.cash}" value="0"></label>
       <div class="trade-props">
-        ${props.map((space) => `<label><input type="checkbox" data-${side}-prop="${space.index}"> <span style="background:${groups[space.group].color}"></span>${space.name}</label>`).join("") || "<p>No tradable properties.</p>"}
+        ${props.map((space) => `<label><input type="checkbox" data-${side}-prop="${space.index}"> <span class="trade-chip" style="background:${groups[space.group].color}"></span><span><strong>${space.name}</strong><em>${groups[space.group].name}</em></span></label>`).join("") || "<p>No tradable properties.</p>"}
       </div>
     </section>
   `;
@@ -1812,8 +1893,10 @@ function renderSpaceDetailActions(space, owner) {
   if (owner?.id === player.id && !player.bankrupt) {
     if (space.kind === "deed") {
       const buildReason = buildBlockedReason(player, space.index);
+      const sellReason = sellBlockedReason(player, space.index);
       if (!buildReason) actions.push(`<button type="button" data-space-build="${space.index}">Build ${game.improvements[space.index] >= 4 ? "Tower" : "Condo"} $${space.houseCost}</button>`);
       else if (ownsMonopoly(player.id, space.group)) notes.push(buildReason);
+      if (!sellReason) actions.push(`<button type="button" data-space-sell-improvement="${space.index}">Sell ${game.improvements[space.index] === 5 ? "Tower" : "Condo"} $${Math.floor(space.houseCost / 2)}</button>`);
     }
     if (game.mortgaged[space.index]) actions.push(`<button type="button" data-space-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>`);
     else actions.push(`<button type="button" data-space-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`);
@@ -1834,6 +1917,7 @@ function renderSpaceDetailActions(space, owner) {
 function wireSpaceDetailActions(index) {
   const buildButton = els.spaceDetail.querySelector("[data-space-build]");
   const mortgageButton = els.spaceDetail.querySelector("[data-space-mortgage]");
+  const sellButton = els.spaceDetail.querySelector("[data-space-sell-improvement]");
   const unmortgageButton = els.spaceDetail.querySelector("[data-space-unmortgage]");
   const buyButton = els.spaceDetail.querySelector("[data-space-buy]");
   const auctionButton = els.spaceDetail.querySelector("[data-space-auction]");
@@ -1843,6 +1927,10 @@ function wireSpaceDetailActions(index) {
   });
   if (mortgageButton) mortgageButton.addEventListener("click", () => {
     mortgageProperty(activePlayer(), Number(mortgageButton.dataset.spaceMortgage));
+    render();
+  });
+  if (sellButton) sellButton.addEventListener("click", () => {
+    sellImprovement(activePlayer(), Number(sellButton.dataset.spaceSellImprovement));
     render();
   });
   if (unmortgageButton) unmortgageButton.addEventListener("click", () => {
