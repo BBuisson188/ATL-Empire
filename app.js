@@ -675,6 +675,9 @@ function getTurnControls(player) {
     if (game.auction) {
       diceHtml = `<button type="button" class="center-roll-button" data-center-action="auctionPanel">Auction</button>`;
     }
+    if (game.phase === "debt") {
+      diceHtml = `<button type="button" class="center-roll-button debt-roll-button" data-center-action="debt">Raise Cash</button>`;
+    }
     if (game.phase === "roll") {
       if (player.inTraffic && !player.isBot) {
         if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "usePeachPass"));
@@ -686,7 +689,7 @@ function getTurnControls(player) {
     }
     if (game.phase === "rolling") actions.push(button("Rolling...", "noop", true));
     if (game.phase === "pending") actions.push(button(game.pending?.label || "Next", "pending"));
-    if (game.phase === "debt") actions.push(button("Resolve Debt", "debt"));
+    if (game.phase === "debt") actions.push(button("Raise Cash", "debt"));
     if (game.phase === "trafficExit") {
       if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "trafficExitPass"));
       actions.push(button(`Buy Peach Pass $${TRAFFIC_FINE}`, "trafficExitPay"));
@@ -1408,7 +1411,7 @@ function renderDebtModal() {
       <button id="debt-continue" ${player.cash >= 0 ? "" : "disabled"}>Continue</button>
     </div>
   `, "debt");
-  document.getElementById("debt-minimize").addEventListener("click", closeModal);
+  document.getElementById("debt-minimize").addEventListener("click", minimizeDebt);
   document.getElementById("debt-manage").addEventListener("click", () => openManageModal(player));
   document.getElementById("debt-trade").addEventListener("click", () => openTradeModal(player));
   document.getElementById("debt-auto").addEventListener("click", () => {
@@ -1425,6 +1428,11 @@ function renderDebtModal() {
       if (game.debt) renderDebtModal();
     });
   });
+}
+
+function minimizeDebt() {
+  closeModal();
+  render();
 }
 
 function debtMortgageRow(player, space) {

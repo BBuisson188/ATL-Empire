@@ -449,8 +449,8 @@ select {
 
 .lottery-pot-badge {
   position: absolute;
-  top: calc(clamp(12px, 2vw, 24px) * -1);
-  left: calc(clamp(10px, 1.6vw, 18px) * -1);
+  top: -28px;
+  left: 0;
   z-index: 4;
   pointer-events: auto;
   display: grid;
@@ -723,6 +723,11 @@ select {
 
 .center-roll-button:hover:not(:disabled) {
   box-shadow: 0 14px 24px rgba(16, 21, 18, 0.18);
+}
+
+.debt-roll-button {
+  background: linear-gradient(180deg, #933931, #702821);
+  border-color: rgba(255, 214, 192, 0.28);
 }
 
 .center-turn-status {
