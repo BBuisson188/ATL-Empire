@@ -349,6 +349,7 @@ function startGameFromSetup(event) {
     autoPlay: true,
     pending: null,
     debt: null,
+    auctionQueue: [],
     trafficExit: null,
     status: `${players[0].name}, roll to play.`,
     dice: [0, 0],
@@ -382,6 +383,7 @@ function hydrate(saved) {
     autoPlay: saved.autoPlay !== false,
     pending: saved.pending || null,
     debt: saved.debt || null,
+    auctionQueue: saved.auctionQueue || [],
     trafficExit: saved.trafficExit || null,
     animating: false,
     movingPlayerId: null,
@@ -729,7 +731,7 @@ function statusForCurrentTurn() {
   if (game.phase === "rolling") return `${player.name} is rolling.`;
   if (game.phase === "buy") return `${board[player.position].name} is available for $${board[player.position].price}.`;
   if (game.phase === "pending") return game.pending?.message || "Resolve the pending action.";
-  if (game.phase === "debt") return `${player.name} needs to raise $${Math.abs(player.cash)} before continuing.`;
+  if (game.phase === "debt") return `${player.name} needs to raise $${Math.abs(player.cash)} to pay ${debtCreditorName(game.debt)}.`;
   if (game.phase === "trafficExit") return `${player.name} did not roll doubles on the third traffic turn. Use a Peach Pass or buy one for $${TRAFFIC_FINE}, then move ${game.trafficExit?.total || 0}.`;
   if (game.phase === "resolve") return `${player.name} is at ${board[player.position].name}. End the turn when ready.`;
   if (player.inTraffic) return trafficRollStatus(player);
@@ -892,6 +894,7 @@ async function resolveLanding(player) {
         return;
       }
       payRent(player, space);
+      if (game.phase === "debt") return;
       game.status = `${player.name} paid $${amount} rent to ${owner.name} for ${space.name}.`;
     } else if (game.mortgaged[space.index]) {
       log(`${space.name} is mortgaged, so no rent is due.`);
@@ -906,6 +909,7 @@ async function resolveLanding(player) {
       return;
     }
     chargePlayer(player, space.amount, null, true);
+    if (game.phase === "debt") return;
     log(`${player.name} paid ${space.name}: $${space.amount}.`);
     game.status = `${player.name} paid ${space.name}: $${space.amount}.`;
   }
@@ -954,10 +958,12 @@ async function resolvePending() {
   game.pending = null;
   if (pending.type === "payRent") {
     payRent(player, board[pending.data.spaceIndex]);
+    if (game.phase === "debt") return render();
     game.status = `${player.name} paid $${pending.data.amount} rent for ${board[pending.data.spaceIndex].name}.`;
   }
   if (pending.type === "payTax") {
     chargePlayer(player, pending.data.amount, null, true);
+    if (game.phase === "debt") return render();
     log(`${player.name} paid ${board[pending.data.spaceIndex].name}: $${pending.data.amount}.`);
     game.status = `${player.name} paid ${board[pending.data.spaceIndex].name}.`;
   }
@@ -1026,11 +1032,15 @@ async function applyCard(player, action) {
       if (player.isBot && game.autoPlay) setTimeout(() => botBuyDecision(player, space), 450);
     } else if (game.owners[target] !== player.id) {
       payRent(player, space, action.multiplier);
+      if (game.phase === "debt") return;
       game.status = `${player.name} paid rent for ${space.name}.`;
     }
   }
   if (action.type === "collect") player.cash += action.amount;
-  if (action.type === "pay") chargePlayer(player, action.amount, null, action.pot);
+  if (action.type === "pay") {
+    chargePlayer(player, action.amount, null, action.pot);
+    if (game.phase === "debt") return;
+  }
   if (action.type === "peachPass") player.peachPasses += 1;
   if (action.type === "moveRelative") {
     movePlayer(player, action.amount);
@@ -1043,13 +1053,20 @@ async function applyCard(player, action) {
       return sum + (count === 5 ? action.tower : count * action.condo);
     }, 0);
     chargePlayer(player, due, null, true);
+    if (game.phase === "debt") return;
     log(`${player.name} paid $${due} for repairs.`);
   }
   if (action.type === "payEach") {
-    game.players.filter((other) => other.id !== player.id && !other.bankrupt).forEach((other) => chargePlayer(player, action.amount, other.id));
+    for (const other of game.players.filter((candidate) => candidate.id !== player.id && !candidate.bankrupt)) {
+      chargePlayer(player, action.amount, other.id);
+      if (game.phase === "debt") return;
+    }
   }
   if (action.type === "collectEach") {
-    game.players.filter((other) => other.id !== player.id && !other.bankrupt).forEach((other) => chargePlayer(other, action.amount, player.id));
+    for (const other of game.players.filter((candidate) => candidate.id !== player.id && !candidate.bankrupt)) {
+      chargePlayer(other, action.amount, player.id);
+      if (game.phase === "debt") return;
+    }
   }
 }
 
@@ -1262,10 +1279,28 @@ function finishAuction() {
     game.status = `No one bid on ${space.name}.`;
   }
   game.auction = null;
-  game.phase = "resolve";
   closeModal();
+  if (startNextQueuedAuction()) {
+    render();
+    maybeRunBot();
+    return;
+  }
+  game.phase = "resolve";
   render();
   maybeRunBot();
+}
+
+function startNextQueuedAuction() {
+  while (game.auctionQueue?.length) {
+    const nextIndex = game.auctionQueue.shift();
+    const space = board[nextIndex];
+    if (space?.price && !game.owners[nextIndex]) {
+      log(`The Bank auctions ${space.name} from the bankrupt player's estate.`);
+      auctionProperty(space);
+      return true;
+    }
+  }
+  return false;
 }
 
 function botBuyDecision(player, space) {
@@ -1291,6 +1326,7 @@ function payRent(player, space, cardMultiplier = null) {
   const amount = calculateRent(space, cardMultiplier);
   const colorSetRent = space.kind === "deed" && (game.improvements[space.index] || 0) === 0 && ownsMonopoly(ownerId, space.group);
   chargePlayer(player, amount, ownerId);
+  if (game.debt?.playerId === player.id) return;
   log(`${player.name} paid $${amount} rent${colorSetRent ? " with color set" : ""} to ${playerById(ownerId).name} for ${space.name}.`);
 }
 
@@ -1312,36 +1348,35 @@ function calculateRent(space, cardMultiplier = null) {
 
 function chargePlayer(player, amount, recipientId = null, toPot = false) {
   if (amount <= 0) return;
+  if (player.cash >= amount) {
+    player.cash -= amount;
+    if (recipientId) playerById(recipientId).cash += amount;
+    if (!recipientId && toPot && game.lotteryEnabled) game.lotteryPot += amount;
+    return;
+  }
   player.cash -= amount;
-  if (recipientId) playerById(recipientId).cash += amount;
-  if (!recipientId && toPot && game.lotteryEnabled) game.lotteryPot += amount;
-  if (player.cash < 0) resolveDebt(player);
+  resolveDebt(player, { amount, creditorId: recipientId, toPot });
 }
 
-function resolveDebt(player) {
+function resolveDebt(player, debtData = {}) {
+  const debt = {
+    playerId: player.id,
+    amount: debtData.amount || Math.abs(player.cash),
+    creditorId: debtData.creditorId || null,
+    toPot: !!debtData.toPot
+  };
+  game.debt = debt;
+  log(`${player.name} owes $${debt.amount} to ${debtCreditorName(debt)} and is short $${Math.abs(player.cash)}.`);
   if (!player.isBot) {
-    game.debt = { playerId: player.id };
     game.phase = "debt";
-    game.status = `${player.name} needs to raise $${Math.abs(player.cash)} before continuing.`;
+    game.status = `${player.name} must raise $${Math.abs(player.cash)} before bankruptcy is allowed.`;
     renderDebtModal();
     return;
   }
-  autoMortgage(player);
-  if (player.cash >= 0) return;
-  player.bankrupt = true;
-  Object.keys(game.owners).forEach((index) => {
-    if (game.owners[index] === player.id) {
-      delete game.owners[index];
-      delete game.improvements[index];
-      delete game.mortgaged[index];
-    }
-  });
-  log(`${player.name} is bankrupt. Their properties returned to the bank.`);
-  if (game.players.filter((candidate) => !candidate.bankrupt).length === 1) {
-    const winner = game.players.find((candidate) => !candidate.bankrupt);
-    game.phase = "over";
-    log(`${winner.name} wins ATL Empire.`);
-  }
+  game.phase = "debt";
+  autoRaiseCash(player);
+  if (player.cash >= 0) finishDebtIfSolved(false);
+  else bankruptPlayer(player);
 }
 
 function renderDebtModal() {
@@ -1349,28 +1384,38 @@ function renderDebtModal() {
   if (!debt) return;
   const player = playerById(debt.playerId);
   const need = Math.abs(player.cash);
+  const liquidation = liquidationSummary(player);
+  const canBankrupt = canDeclareBankruptcy(player);
   const recommendations = mortgageRecommendations(player);
   showModal(`
     <h2>Raise Cash</h2>
-    <p class="modal-note">${escapeHtml(player.name)} is short $${need}. Choose what to mortgage, or minimize this and manage/trade first.</p>
+    <p class="modal-note">${escapeHtml(player.name)} owes $${debt.amount} to ${escapeHtml(debtCreditorName(debt))} and is short $${need}. Official rules require selling buildings and mortgaging eligible properties before bankruptcy.</p>
     <div class="debt-summary">
       <strong>Cash: $${player.cash}</strong>
-      <span>Recommended: ${recommendations[0] ? `${recommendations[0].name} for $${recommendations[0].mortgage}` : "No mortgage available"}</span>
+      <span>Legal liquidation available: $${liquidation.available}</span>
+      <span>Recommended: ${recommendations[0] ? `${recommendations[0].name} for $${recommendations[0].mortgage}` : "Sell buildings or no mortgage available"}</span>
     </div>
     <div class="manage-list">
-      ${recommendations.map((space) => debtMortgageRow(player, space)).join("") || "<p>No unmortgaged properties available. You may need to trade or declare bankruptcy.</p>"}
+      ${recommendations.map((space) => debtMortgageRow(player, space)).join("") || "<p>No properties can be mortgaged yet. Sell buildings first, complete a trade, or declare bankruptcy only if liquidation cannot cover the debt.</p>"}
     </div>
+    ${canBankrupt ? "" : `<p class="modal-note">${escapeHtml(bankruptcyBlockedMessage(player))}</p>`}
     <div class="modal-actions">
       <button id="debt-minimize">Minimize</button>
       <button id="debt-manage">Manage</button>
       <button id="debt-trade">Trade</button>
-      <button id="debt-bankrupt">Declare Bankruptcy</button>
+      <button id="debt-auto">Auto Raise Cash</button>
+      <button id="debt-bankrupt" ${canBankrupt ? "" : "disabled"}>Declare Bankruptcy</button>
       <button id="debt-continue" ${player.cash >= 0 ? "" : "disabled"}>Continue</button>
     </div>
   `, "debt");
   document.getElementById("debt-minimize").addEventListener("click", closeModal);
   document.getElementById("debt-manage").addEventListener("click", () => openManageModal(player));
   document.getElementById("debt-trade").addEventListener("click", () => openTradeModal(player));
+  document.getElementById("debt-auto").addEventListener("click", () => {
+    autoRaiseCash(player);
+    finishDebtIfSolved(false);
+    if (game.debt) renderDebtModal();
+  });
   document.getElementById("debt-bankrupt").addEventListener("click", () => bankruptPlayer(player));
   document.getElementById("debt-continue").addEventListener("click", finishDebtIfSolved);
   els.modalContent.querySelectorAll("[data-debt-mortgage]").forEach((buttonEl) => {
@@ -1394,52 +1439,186 @@ function debtMortgageRow(player, space) {
 
 function mortgageRecommendations(player) {
   return ownedProperties(player.id)
-    .filter((space) => !game.mortgaged[space.index])
+    .filter((space) => !mortgageBlockedReason(player, space.index))
     .sort((a, b) => {
-      const aImproved = game.improvements[a.index] || 0;
-      const bImproved = game.improvements[b.index] || 0;
-      return aImproved - bImproved || a.mortgage - b.mortgage;
+      return a.mortgage - b.mortgage;
     });
 }
 
 function finishDebtIfSolved(closeWhenDone = true) {
   if (!game.debt) return;
-  const player = playerById(game.debt.playerId);
+  const debt = game.debt;
+  const player = playerById(debt.playerId);
   if (player.cash < 0) return;
+  settleDebt(debt);
   game.debt = null;
   game.phase = "resolve";
-  game.status = `${player.name} raised enough cash.`;
+  game.status = `${player.name} raised enough cash and paid ${debtCreditorName(debt)}.`;
+  log(`${player.name} raised enough cash and paid $${debt.amount} to ${debtCreditorName(debt)}.`);
   if (closeWhenDone) closeModal();
   render();
 }
 
 function bankruptPlayer(player) {
+  if (!canDeclareBankruptcy(player)) {
+    const message = bankruptcyBlockedMessage(player);
+    game.status = message;
+    log(message);
+    renderDebtModal();
+    return;
+  }
+  const debt = game.debt || { playerId: player.id, amount: Math.abs(player.cash), creditorId: null, toPot: false };
+  log(`${player.name} cannot raise enough through legal liquidation and is bankrupt to ${debtCreditorName(debt)}.`);
+  if (debt.creditorId) bankruptToPlayer(player, debt);
+  else bankruptToBank(player, debt);
+}
+
+function settleDebt(debt) {
+  if (debt.creditorId) playerById(debt.creditorId).cash += debt.amount;
+  else if (debt.toPot && game.lotteryEnabled) game.lotteryPot += debt.amount;
+}
+
+function bankruptToBank(player, debt) {
+  sellAllBuildingsToBank(player);
+  const returned = ownedProperties(player.id).map((space) => space.index);
+  const cashPaid = Math.max(0, debt.amount + player.cash);
   player.bankrupt = true;
-  Object.keys(game.owners).forEach((index) => {
-    if (game.owners[index] === player.id) {
-      delete game.owners[index];
-      delete game.improvements[index];
-      delete game.mortgaged[index];
-    }
+  player.cash = 0;
+  player.peachPasses = 0;
+  returned.forEach((index) => {
+    delete game.owners[index];
+    delete game.improvements[index];
+    delete game.mortgaged[index];
   });
   game.debt = null;
-  game.phase = "resolve";
-  log(`${player.name} declared bankruptcy. Their properties returned to the bank.`);
+  log(`${player.name}'s remaining $${cashPaid} and Peach Pass cards returned to the Bank.`);
+  log(`${player.name}'s properties returned to the Bank and will be auctioned.`);
+  game.auctionQueue = [...(game.auctionQueue || []), ...returned];
+  checkForWinner();
   closeModal();
+  if (game.phase !== "over" && !startNextQueuedAuction()) game.phase = "resolve";
   render();
 }
 
-function autoMortgage(player) {
-  ownedProperties(player.id)
-    .filter((space) => !game.mortgaged[space.index])
-    .sort((a, b) => (game.improvements[a.index] || 0) - (game.improvements[b.index] || 0))
-    .forEach((space) => {
-      if (player.cash >= 0) return;
-      game.mortgaged[space.index] = true;
-      game.improvements[space.index] = 0;
-      player.cash += space.mortgage;
-      log(`${player.name} mortgaged ${space.name} for $${space.mortgage}.`);
-    });
+function bankruptToPlayer(player, debt) {
+  sellAllBuildingsToBank(player);
+  const creditor = playerById(debt.creditorId);
+  const transferred = ownedProperties(player.id).map((space) => space.index);
+  const mortgagedTransfers = transferred.filter((index) => game.mortgaged[index]);
+  const cashPaid = Math.max(0, debt.amount + player.cash);
+  creditor.cash += cashPaid;
+  player.cash = 0;
+  transferred.forEach((index) => {
+    game.owners[index] = creditor.id;
+    delete game.improvements[index];
+  });
+  if (player.peachPasses > 0) {
+    creditor.peachPasses += player.peachPasses;
+    log(`${creditor.name} received ${player.peachPasses} Peach Pass card(s) from ${player.name}.`);
+    player.peachPasses = 0;
+  }
+  player.bankrupt = true;
+  game.debt = null;
+  log(`${creditor.name} received $${cashPaid} and ${transferred.length} propert${transferred.length === 1 ? "y" : "ies"} from ${player.name}.`);
+  mortgagedTransfers.forEach((index) => handleTransferredMortgage(creditor, board[index]));
+  log(`The unpaid balance is forgiven by bankruptcy. ${player.name} is eliminated.`);
+  checkForWinner();
+  closeModal();
+  if (game.debt) {
+    render();
+    return;
+  }
+  if (game.phase !== "over") game.phase = "resolve";
+  render();
+}
+
+function autoRaiseCash(player) {
+  if (!game.debt || game.debt.playerId !== player.id) return;
+  log(`${player.name} chose Auto Raise Cash. The Bank will sell buildings first, then mortgage eligible properties.`);
+  autoSellBuildings(player);
+  mortgageRecommendations(player).forEach((space) => {
+    if (player.cash >= 0) return;
+    mortgageProperty(player, space.index);
+  });
+  if (player.cash < 0) {
+    log(`${player.name} is still short $${Math.abs(player.cash)} after legal automatic liquidation.`);
+  }
+}
+
+function autoSellBuildings(player) {
+  while (player.cash < 0) {
+    const sellable = ownedProperties(player.id)
+      .filter((space) => !sellBlockedReason(player, space.index))
+      .sort((a, b) => {
+        const aCount = game.improvements[a.index] || 0;
+        const bCount = game.improvements[b.index] || 0;
+        return bCount - aCount || Math.floor(a.houseCost / 2) - Math.floor(b.houseCost / 2);
+      });
+    if (!sellable.length) return;
+    sellImprovement(player, sellable[0].index);
+  }
+}
+
+function sellAllBuildingsToBank(player) {
+  let sold = 0;
+  while (true) {
+    const sellable = ownedProperties(player.id)
+      .filter((space) => !sellBlockedReason(player, space.index))
+      .sort((a, b) => (game.improvements[b.index] || 0) - (game.improvements[a.index] || 0));
+    if (!sellable.length) break;
+    sellImprovement(player, sellable[0].index);
+    sold += 1;
+  }
+  if (sold) log(`${player.name} sold all remaining buildings back to the Bank before bankruptcy transfer.`);
+}
+
+function liquidationSummary(player) {
+  const buildingValue = ownedProperties(player.id).reduce((sum, space) => {
+    const count = game.improvements[space.index] || 0;
+    return sum + count * Math.floor((space.houseCost || 0) / 2);
+  }, 0);
+  const mortgageValue = ownedProperties(player.id).reduce((sum, space) => {
+    if (game.mortgaged[space.index]) return sum;
+    return sum + space.mortgage;
+  }, 0);
+  const available = Math.max(0, buildingValue + mortgageValue);
+  return { buildingValue, mortgageValue, available };
+}
+
+function canDeclareBankruptcy(player) {
+  if (!game.debt || game.debt.playerId !== player.id) return player.cash < 0;
+  const liquidation = liquidationSummary(player);
+  return player.cash + liquidation.available < 0;
+}
+
+function bankruptcyBlockedMessage(player) {
+  const liquidation = liquidationSummary(player);
+  return `${player.name} cannot declare bankruptcy yet. They can still raise up to $${liquidation.available} by selling buildings and mortgaging eligible properties.`;
+}
+
+function debtCreditorName(debt) {
+  return debt.creditorId ? playerById(debt.creditorId)?.name || "another player" : "the Bank";
+}
+
+function checkForWinner() {
+  if (game.players.filter((candidate) => !candidate.bankrupt).length === 1) {
+    const winner = game.players.find((candidate) => !candidate.bankrupt);
+    game.phase = "over";
+    game.status = `${winner.name} wins ATL Empire.`;
+    log(`${winner.name} wins ATL Empire.`);
+  }
+}
+
+function handleTransferredMortgage(creditor, space) {
+  const interest = Math.ceil(space.mortgage * 0.1);
+  if (creditor.cash >= interest) {
+    creditor.cash -= interest;
+    log(`${creditor.name} received mortgaged ${space.name} and paid $${interest} immediate mortgage interest to the Bank.`);
+    game.status = `${creditor.name} paid mortgage interest on transferred property.`;
+    return;
+  }
+  log(`${creditor.name} received mortgaged ${space.name} and owes $${interest} immediate mortgage interest to the Bank.`);
+  chargePlayer(creditor, interest);
 }
 
 function endTurn() {
@@ -1514,7 +1693,7 @@ function openManageModal(player) {
   const props = ownedProperties(player.id);
   showModal(`
     <h2>Manage ${escapeHtml(player.name)}</h2>
-    <p class="modal-note">Build evenly across complete color sets. Mortgaging clears condos and towers on that property.</p>
+    <p class="modal-note">Build and sell evenly across complete color sets. Sell every building in a color group before mortgaging or trading those deeds.</p>
     <div class="manage-list">
       ${props.map((space) => manageRow(player, space)).join("") || "<p>No properties yet.</p>"}
     </div>
@@ -1550,6 +1729,7 @@ function manageRow(player, space) {
   const canBuild = !buildReason;
   const sellReason = sellBlockedReason(player, space.index);
   const canSell = !sellReason;
+  const mortgageReason = mortgageBlockedReason(player, space.index);
   const sellValue = Math.floor((space.houseCost || 0) / 2);
   return `
     <article class="manage-row">
@@ -1557,7 +1737,7 @@ function manageRow(player, space) {
       <div><strong>${space.name}</strong><span>${game.mortgaged[space.index] ? "Mortgaged" : improvements === 5 ? "Tower" : `${improvements} condo(s)`}</span></div>
       ${canBuild ? `<button data-build="${space.index}">Build $${space.houseCost}</button>` : space.kind === "deed" && ownsMonopoly(player.id, space.group) ? `<span class="build-note">${buildReason}</span>` : ""}
       ${canSell ? `<button data-sell-improvement="${space.index}">Sell ${improvements === 5 ? "Tower" : "Condo"} $${sellValue}</button>` : ""}
-      ${game.mortgaged[space.index] ? `<button data-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>` : `<button data-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`}
+      ${game.mortgaged[space.index] ? `<button data-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>` : mortgageReason ? `<span class="build-note">${mortgageReason}</span>` : `<button data-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`}
     </article>
   `;
 }
@@ -1614,13 +1794,26 @@ function buildBlockedReason(player, index) {
 }
 
 function mortgageProperty(player, index) {
-  if (game.owners[index] !== player.id) return;
+  const reason = mortgageBlockedReason(player, index);
+  if (reason) {
+    game.status = reason;
+    log(`${player.name} cannot mortgage ${board[index]?.name || "that property"}: ${reason}.`);
+    return;
+  }
   const space = board[index];
   game.mortgaged[index] = true;
-  game.improvements[index] = 0;
   selectSpace(index);
   player.cash += space.mortgage;
-  log(`${player.name} mortgaged ${space.name}.`);
+  log(`${player.name} mortgaged ${space.name} for $${space.mortgage}.`);
+}
+
+function mortgageBlockedReason(player, index) {
+  const space = board[index];
+  if (!space?.price) return "Not mortgageable";
+  if (game.owners[index] !== player.id) return "Not owned";
+  if (game.mortgaged[index]) return "Already mortgaged";
+  if (space.kind === "deed" && groupHasBuildings(space.group)) return "Sell buildings in this color group first";
+  return "";
 }
 
 function unmortgageProperty(player, index) {
@@ -1664,7 +1857,7 @@ function tradeBuilderHtml(left, right) {
 }
 
 function tradeSideHtml(title, side, player) {
-  const props = ownedProperties(player.id).filter((space) => (game.improvements[space.index] || 0) === 0);
+  const props = ownedProperties(player.id).filter((space) => transferBlockedReason(player, space.index) === "");
   return `
     <section class="trade-side">
       <h3>${title}</h3>
@@ -1674,6 +1867,14 @@ function tradeSideHtml(title, side, player) {
       </div>
     </section>
   `;
+}
+
+function transferBlockedReason(player, index) {
+  const space = board[index];
+  if (!space?.price) return "Not transferable";
+  if (game.owners[index] !== player.id) return "Not owned";
+  if (space.kind === "deed" && groupHasBuildings(space.group)) return "Sell buildings in this color group first";
+  return "";
 }
 
 function proposeTrade(from, to) {
@@ -1899,7 +2100,11 @@ function renderSpaceDetailActions(space, owner) {
       if (!sellReason) actions.push(`<button type="button" data-space-sell-improvement="${space.index}">Sell ${game.improvements[space.index] === 5 ? "Tower" : "Condo"} $${Math.floor(space.houseCost / 2)}</button>`);
     }
     if (game.mortgaged[space.index]) actions.push(`<button type="button" data-space-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>`);
-    else actions.push(`<button type="button" data-space-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`);
+    else {
+      const mortgageReason = mortgageBlockedReason(player, space.index);
+      if (mortgageReason) notes.push(mortgageReason);
+      else actions.push(`<button type="button" data-space-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`);
+    }
   }
   if (game.phase === "buy" && player.position === space.index && !owner && !player.isBot) {
     actions.push(`<button type="button" data-space-buy="${space.index}">Buy for $${space.price}</button>`);
@@ -2184,6 +2389,11 @@ function ownsMonopoly(playerId, group) {
   if (!group || group === "trail" || group === "utility") return false;
   const groupSpaces = board.filter((space) => space.group === group);
   return groupSpaces.length > 0 && groupSpaces.every((space) => game.owners[space.index] === playerId);
+}
+
+function groupHasBuildings(group) {
+  if (!group || group === "trail" || group === "utility") return false;
+  return board.some((space) => space.group === group && (game.improvements[space.index] || 0) > 0);
 }
 
 function groupIds() {
