@@ -449,8 +449,8 @@ select {
 
 .lottery-pot-badge {
   position: absolute;
-  top: 0;
-  left: 0;
+  top: calc(clamp(12px, 2vw, 24px) * -1);
+  left: calc(clamp(10px, 1.6vw, 18px) * -1);
   z-index: 4;
   pointer-events: auto;
   display: grid;
@@ -485,7 +485,7 @@ select {
 
 .deck-row .center-turn-console {
   width: min(100%, 680px);
-  margin: clamp(68px, 8vw, 92px) auto 0;
+  margin: clamp(104px, 10vw, 132px) auto 0;
   position: relative;
   z-index: 3;
   pointer-events: auto;
@@ -1086,6 +1086,7 @@ select {
 }
 
 .space.property .generated-art-thumb {
+  object-fit: cover;
   transform: scale(1.07);
   transform-origin: center center;
 }
@@ -1603,7 +1604,7 @@ select {
 .generated-art-thumb {
   border-radius: 10px;
   object-fit: contain;
-  background: rgba(255, 249, 239, 0.92);
+  background: transparent;
 }
 
 .art-fallback {
@@ -2146,9 +2147,16 @@ select {
     font-size: 0.52rem;
   }
 
-  .center-brand-image,
   .center-rail {
     display: none;
+  }
+
+  .center-brand-image {
+    display: block;
+    top: 58%;
+    width: min(280px, 50%);
+    opacity: 0.2;
+    transform: translate(-50%, -50%);
   }
 
   .center-turn-head {
@@ -2360,6 +2368,10 @@ select {
     padding: 6px 8px;
     border-radius: 16px;
     align-self: start;
+  }
+
+  .deck-row .center-turn-console {
+    margin-top: clamp(86px, 9vw, 110px);
   }
 
   .center-turn-head {
