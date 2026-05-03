@@ -93,7 +93,7 @@ const board = [
   deed("Vinings", "red", "A riverside district card with dining lights and tree-lined streets."),
   cardSpace("chance", "Peachtree Chance"),
   deed("Decatur", "red", "A courthouse square card with restaurants, rails, and old brick."),
-  deed("Buckhead", "red", "A skyline district card with polished towers and late-night traffic."),
+  deed("Buckhead", "red", "A skyline district card with polished high-rises and late-night traffic."),
   trail("Silver Comet Trail"),
   deed("The Battery Atlanta", "yellow", "A mixed-use ballpark district with lights and walkable streets."),
   deed("Atlantic Station", "yellow", "A city shopping district card with bridges, shops, and apartments."),
@@ -149,7 +149,7 @@ const chanceCards = [
   { text: "Peach Pass. Keep this card until you need to escape rush hour traffic.", action: { type: "peachPass" } },
   { text: "Wrong turn near Spaghetti Junction. Go back 3 spaces.", action: { type: "moveRelative", amount: -3 } },
   { text: "Take I-285 at 5PM. Go directly to rush hour traffic.", action: { type: "goTraffic" } },
-  { text: "Condo association repairs are due. Pay $25 per condo and $100 per tower.", action: { type: "repairs", condo: 25, tower: 100 } },
+  { text: "Townhome association repairs are due. Pay $25 per townhome and $100 per mansion.", action: { type: "repairs", townhouse: 25, mansion: 100 } },
   { text: "Speeding fine on the connector. Pay $15.", action: { type: "pay", amount: 15, pot: true } },
   { text: "Take a BeltLine detour. Advance to Atlanta BeltLine. If you pass Peachtree Street, collect $200.", action: { type: "advance", to: "Atlanta BeltLine" } },
   { text: "You chaired the neighborhood board. Pay each player $50.", action: { type: "payEach", amount: 50 } },
@@ -170,9 +170,9 @@ const communityCards = [
   { text: "Hospital fees after a pickup game injury. Pay $100.", action: { type: "pay", amount: 100, pot: true } },
   { text: "Preschool tuition deposit is due. Pay $50.", action: { type: "pay", amount: 50, pot: true } },
   { text: "Consulting fee from an Atlanta nonprofit. Receive $25.", action: { type: "collect", amount: 25 } },
-  { text: "Street repairs on your block. Pay $40 per condo and $115 per tower.", action: { type: "repairs", condo: 40, tower: 115 } },
+  { text: "Street repairs on your block. Pay $40 per townhome and $115 per mansion.", action: { type: "repairs", townhouse: 40, mansion: 115 } },
   { text: "You win second prize at the neighborhood festival. Collect $10.", action: { type: "collect", amount: 10 } },
-  { text: "You inherit a Midtown condo deposit. Collect $100.", action: { type: "collect", amount: 100 } }
+  { text: "You inherit a Midtown townhome deposit. Collect $100.", action: { type: "collect", amount: 100 } }
 ];
 
 let game = null;
@@ -419,6 +419,12 @@ function render() {
 }
 
 function renderBoard() {
+  if (!els.board.dataset.ready) buildBoard();
+  updateBoardState();
+  wireBoardChromeActions();
+}
+
+function buildBoard() {
   els.board.innerHTML = "";
   const currentPlayer = activePlayer();
   const center = document.createElement("div");
@@ -432,9 +438,9 @@ function renderBoard() {
         <strong>$${game.lotteryPot}</strong>
       </div>
       <div class="deck-row">
-        ${renderDeckStack("chance")}
-        ${renderCenterTurnConsole(currentPlayer)}
-        ${renderDeckStack("community")}
+        <span class="deck-stack-slot" data-deck-stack-slot="chance">${renderDeckStack("chance")}</span>
+        <span class="center-turn-console-slot" data-center-console-slot>${renderCenterTurnConsole(currentPlayer)}</span>
+        <span class="deck-stack-slot" data-deck-stack-slot="community">${renderDeckStack("community")}</span>
       </div>
     </div>
   `;
@@ -443,6 +449,7 @@ function renderBoard() {
     const owner = game.owners[space.index] ? playerById(game.owners[space.index]) : null;
     const cell = document.createElement("button");
     cell.type = "button";
+    cell.dataset.spaceIndex = String(space.index);
     cell.className = `space ${space.type} ${space.group || ""} ${space.deck || ""} ${boardRingClass(space.index)} pos-${space.index} ${owner ? "owned" : ""} ${game.mortgaged[space.index] ? "mortgaged" : ""}`;
     cell.style.setProperty("--group-color", groups[space.group]?.color || "#d6cab1");
     if (owner) cell.style.setProperty("--owner-color", owner.color);
@@ -457,6 +464,7 @@ function renderBoard() {
         ${space.price ? `<span class="space-price">$${space.price}</span>` : ""}
         <span class="tokens-here">${tokensOn(space.index)}</span>
       </span>
+      <span class="improvements-here" data-improvements-here>${improvementMarkers(space)}</span>
     `;
     cell.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -466,16 +474,71 @@ function renderBoard() {
     });
     els.board.appendChild(cell);
   });
+  els.board.dataset.ready = "true";
+}
+
+function updateBoardState() {
+  const currentPlayer = activePlayer();
+  const consoleSlot = els.board.querySelector("[data-center-console-slot]");
+  if (consoleSlot) consoleSlot.innerHTML = renderCenterTurnConsole(currentPlayer);
+
+  ["chance", "community"].forEach((deckName) => {
+    const slot = els.board.querySelector(`[data-deck-stack-slot="${deckName}"]`);
+    if (!slot) return;
+    const deckKey = JSON.stringify(game.revealedCards?.[deckName] || null);
+    if (slot.dataset.deckKey !== deckKey) {
+      slot.innerHTML = renderDeckStack(deckName);
+      slot.dataset.deckKey = deckKey;
+    }
+  });
+
+  board.forEach((space) => {
+    const cell = els.board.querySelector(`[data-space-index="${space.index}"]`);
+    if (!cell) return;
+    const owner = game.owners[space.index] ? playerById(game.owners[space.index]) : null;
+    cell.classList.toggle("owned", !!owner);
+    cell.classList.toggle("mortgaged", !!game.mortgaged[space.index]);
+    if (owner) cell.style.setProperty("--owner-color", owner.color);
+    else cell.style.removeProperty("--owner-color");
+
+    const existingFlag = cell.querySelector(":scope > .owner-flag");
+    if (owner && !existingFlag) {
+      const flag = document.createElement("span");
+      flag.className = "owner-flag";
+      cell.insertBefore(flag, cell.querySelector(".space-inner"));
+    } else if (!owner && existingFlag) {
+      existingFlag.remove();
+    }
+    const ownerFlag = cell.querySelector(":scope > .owner-flag");
+    if (ownerFlag) ownerFlag.title = `Owned by ${owner.name}`;
+
+    const tokenSlot = cell.querySelector(".tokens-here");
+    const tokensHtml = tokensOn(space.index);
+    if (tokenSlot && tokenSlot.dataset.rendered !== tokensHtml) {
+      tokenSlot.innerHTML = tokensHtml;
+      tokenSlot.dataset.rendered = tokensHtml;
+    }
+
+    const improvementSlot = cell.querySelector("[data-improvements-here]");
+    const improvementsHtml = improvementMarkers(space);
+    if (improvementSlot && improvementSlot.dataset.rendered !== improvementsHtml) {
+      improvementSlot.innerHTML = improvementsHtml;
+      improvementSlot.dataset.rendered = improvementsHtml;
+    }
+  });
+}
+
+function wireBoardChromeActions() {
   els.board.querySelectorAll("[data-deck-preview]").forEach((deck) => {
-    deck.addEventListener("click", () => {
+    deck.onclick = () => {
       renderDeckDetail(deck.dataset.deckPreview);
-    });
+    };
   });
   const dock = els.board.querySelector("[data-open-auction]");
-  if (dock) dock.addEventListener("click", (event) => {
+  if (dock) dock.onclick = (event) => {
     event.stopPropagation();
     renderAuctionModal();
-  });
+  };
 }
 
 function updateBoardMotion() {
@@ -555,7 +618,7 @@ function renderSpaceDetail(index) {
         <dt>Price</dt><dd>$${space.price}</dd>
         <dt>Owner</dt><dd>${owner ? `<span class="detail-owner"><span class="player-dot" style="background:${owner.color}"></span>${escapeHtml(owner.name)}</span>` : "Unowned"}</dd>
         <dt>Mortgage</dt><dd>$${space.mortgage}</dd>
-        ${space.kind === "deed" ? `<dt>Build</dt><dd>${improvements < 5 ? `${improvements} condo${improvements === 1 ? "" : "s"}` : "Tower"}</dd>` : ""}
+        ${space.kind === "deed" ? `<dt>Build</dt><dd>${improvementLabel(improvements)}</dd>` : ""}
         <dt>Rent</dt><dd>${rentSummary(space)}</dd>
       </dl>` : ""}
       ${renderSpaceDetailActions(space, owner)}
@@ -576,11 +639,11 @@ function deedRentRows(space) {
   const rows = [
     ["base", "Base rent", space.rent[0]],
     ["set", "With color set", space.rent[0] * 2],
-    ["1", "1 condo", space.rent[1]],
-    ["2", "2 condos", space.rent[2]],
-    ["3", "3 condos", space.rent[3]],
-    ["4", "4 condos", space.rent[4]],
-    ["5", "Tower", space.rent[5]]
+    ["1", "1 townhome", space.rent[1]],
+    ["2", "2 townhomes", space.rent[2]],
+    ["3", "3 townhomes", space.rent[3]],
+    ["4", "4 townhomes", space.rent[4]],
+    ["5", "Mansion", space.rent[5]]
   ];
   return `
     <div class="rent-table">
@@ -1041,7 +1104,9 @@ async function applyCard(player, action) {
   if (action.type === "repairs") {
     const due = ownedProperties(player.id).reduce((sum, space) => {
       const count = game.improvements[space.index] || 0;
-      return sum + (count === 5 ? action.tower : count * action.condo);
+      const townhouseCost = action.townhouse ?? 0;
+      const mansionCost = action.mansion ?? 0;
+      return sum + (count === 5 ? mansionCost : count * townhouseCost);
     }, 0);
     chargePlayer(player, due, null, true);
     if (game.phase === "debt") return;
@@ -1693,7 +1758,7 @@ function botBuild(player) {
     if (player.cash - cheapest.houseCost >= profile.buildReserve) {
       player.cash -= cheapest.houseCost;
       game.improvements[cheapest.index] = (game.improvements[cheapest.index] || 0) + 1;
-      log(`${player.name} added ${game.improvements[cheapest.index] === 5 ? "a tower" : "a condo"} to ${cheapest.name}.`);
+      log(`${player.name} added ${indefiniteImprovementName(game.improvements[cheapest.index])} to ${cheapest.name}.`);
     }
   });
 }
@@ -1702,7 +1767,7 @@ function openManageModal(player) {
   const props = ownedProperties(player.id);
   showModal(`
     <h2>Manage ${escapeHtml(player.name)}</h2>
-    <p class="modal-note">Build and sell evenly across complete color sets. Sell every building in a color group before mortgaging or trading those deeds.</p>
+    <p class="modal-note">Build and sell evenly across complete color sets. Sell every townhome or mansion in a color group before mortgaging or trading those deeds.</p>
     <div class="manage-list">
       ${props.map((space) => manageRow(player, space)).join("") || "<p>No properties yet.</p>"}
     </div>
@@ -1727,9 +1792,19 @@ function openManageModal(player) {
 }
 
 function refreshManageModal(player) {
+  const manageList = els.modalContent.querySelector(".manage-list");
+  const scrollTop = manageList?.scrollTop || 0;
+  const scrollLeft = manageList?.scrollLeft || 0;
+  const pageX = window.scrollX;
+  const pageY = window.scrollY;
   render();
-  if (els.modal.open) els.modalContent.innerHTML = "";
   openManageModal(player);
+  const refreshedList = els.modalContent.querySelector(".manage-list");
+  if (refreshedList) {
+    refreshedList.scrollTop = scrollTop;
+    refreshedList.scrollLeft = scrollLeft;
+  }
+  window.scrollTo(pageX, pageY);
 }
 
 function manageRow(player, space) {
@@ -1743,9 +1818,9 @@ function manageRow(player, space) {
   return `
     <article class="manage-row">
       <span class="chip" style="background:${groups[space.group].color}"></span>
-      <div><strong>${space.name}</strong><span>${game.mortgaged[space.index] ? "Mortgaged" : improvements === 5 ? "Tower" : `${improvements} condo(s)`}</span></div>
+      <div><strong>${space.name}</strong><span>${game.mortgaged[space.index] ? "Mortgaged" : improvementLabel(improvements)}</span></div>
       ${canBuild ? `<button data-build="${space.index}">Build $${space.houseCost}</button>` : space.kind === "deed" && ownsMonopoly(player.id, space.group) ? `<span class="build-note">${buildReason}</span>` : ""}
-      ${canSell ? `<button data-sell-improvement="${space.index}">Sell ${improvements === 5 ? "Tower" : "Condo"} $${sellValue}</button>` : ""}
+      ${canSell ? `<button data-sell-improvement="${space.index}">Sell ${improvementName(improvements)} $${sellValue}</button>` : ""}
       ${game.mortgaged[space.index] ? `<button data-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>` : mortgageReason ? `<span class="build-note">${mortgageReason}</span>` : `<button data-mortgage="${space.index}">Mortgage $${space.mortgage}</button>`}
     </article>
   `;
@@ -1757,7 +1832,7 @@ function buildImprovement(player, index) {
   player.cash -= space.houseCost;
   game.improvements[index] = (game.improvements[index] || 0) + 1;
   selectSpace(index);
-  log(`${player.name} built ${game.improvements[index] === 5 ? "a tower" : "a condo"} on ${space.name}.`);
+  log(`${player.name} built ${indefiniteImprovementName(game.improvements[index])} on ${space.name}.`);
 }
 
 function canBuildImprovement(player, index) {
@@ -1771,7 +1846,7 @@ function sellImprovement(player, index) {
   game.improvements[index] = improvements - 1;
   player.cash += Math.floor(space.houseCost / 2);
   selectSpace(index);
-  log(`${player.name} sold ${improvements === 5 ? "a tower" : "a condo"} on ${space.name}.`);
+  log(`${player.name} sold ${indefiniteImprovementName(improvements)} on ${space.name}.`);
 }
 
 function sellBlockedReason(player, index) {
@@ -1779,7 +1854,7 @@ function sellBlockedReason(player, index) {
   if (!space || space.kind !== "deed") return "Not sellable";
   if (game.owners[index] !== player.id) return "Not owned";
   const improvements = game.improvements[index] || 0;
-  if (improvements <= 0) return "No condos";
+  if (improvements <= 0) return "No townhomes";
   const groupSpaces = board.filter((candidate) => candidate.group === space.group && candidate.kind === "deed");
   const max = Math.max(...groupSpaces.map((candidate) => game.improvements[candidate.index] || 0));
   if (improvements < max) return "Sell evenly";
@@ -1987,7 +2062,7 @@ function portfolioGroup(player, group) {
   return `
     <section class="portfolio-group">
       <h3><span class="chip" style="background:${groups[group].color}"></span>${groups[group].name}</h3>
-      ${props.map((space) => `<p>${space.name}${game.mortgaged[space.index] ? " · Mortgaged" : ""}${space.kind === "deed" ? ` · ${game.improvements[space.index] === 5 ? "Tower" : `${game.improvements[space.index] || 0} condos`}` : ""}</p>`).join("")}
+      ${props.map((space) => `<p>${space.name}${game.mortgaged[space.index] ? " · Mortgaged" : ""}${space.kind === "deed" ? ` · ${improvementLabel(game.improvements[space.index] || 0)}` : ""}</p>`).join("")}
     </section>
   `;
 }
@@ -2011,7 +2086,7 @@ function showSpacePopover(index, anchor) {
       ${space.price ? `<dl class="detail-grid">
         <dt>Price</dt><dd>$${space.price}</dd>
         <dt>Mortgage</dt><dd>$${space.mortgage}</dd>
-        ${space.kind === "deed" ? `<dt>Build</dt><dd>${improvements === 5 ? "Tower" : `${improvements} condo${improvements === 1 ? "" : "s"}`}</dd>` : ""}
+        ${space.kind === "deed" ? `<dt>Build</dt><dd>${improvementLabel(improvements)}</dd>` : ""}
         <dt>Rent</dt><dd>${rentSummary(space)}</dd>
       </dl>` : ""}
     </article>
@@ -2104,9 +2179,9 @@ function renderSpaceDetailActions(space, owner) {
     if (space.kind === "deed") {
       const buildReason = buildBlockedReason(player, space.index);
       const sellReason = sellBlockedReason(player, space.index);
-      if (!buildReason) actions.push(`<button type="button" data-space-build="${space.index}">Build ${game.improvements[space.index] >= 4 ? "Tower" : "Condo"} $${space.houseCost}</button>`);
+      if (!buildReason) actions.push(`<button type="button" data-space-build="${space.index}">Build ${game.improvements[space.index] >= 4 ? "Mansion" : "Townhome"} $${space.houseCost}</button>`);
       else if (ownsMonopoly(player.id, space.group)) notes.push(buildReason);
-      if (!sellReason) actions.push(`<button type="button" data-space-sell-improvement="${space.index}">Sell ${game.improvements[space.index] === 5 ? "Tower" : "Condo"} $${Math.floor(space.houseCost / 2)}</button>`);
+      if (!sellReason) actions.push(`<button type="button" data-space-sell-improvement="${space.index}">Sell ${improvementName(game.improvements[space.index] || 0)} $${Math.floor(space.houseCost / 2)}</button>`);
     }
     if (game.mortgaged[space.index]) actions.push(`<button type="button" data-space-unmortgage="${space.index}">Unmortgage $${Math.ceil(space.mortgage * 1.1)}</button>`);
     else {
@@ -2633,6 +2708,27 @@ function tokensOn(index) {
     .filter((player) => !player.bankrupt && player.position === index)
     .map((player) => `<span class="board-token token-${player.token} ${game.movingPlayerId === player.id ? "moving" : ""}" style="--token-color:${player.color}" title="${escapeHtml(player.name)}">${tokenMarkup(player.token)}</span>`)
     .join("");
+}
+
+function improvementMarkers(space) {
+  if (!game || space.kind !== "deed") return "";
+  const count = game.improvements[space.index] || 0;
+  if (count <= 0) return "";
+  const src = count >= 5 ? "assets/mansion.png" : `assets/townhouse_${count}.png`;
+  return `<img class="improvement-marker improvement-${Math.min(count, 5)}" src="${src}" alt="${escapeHtml(improvementLabel(count))}" loading="lazy" decoding="async">`;
+}
+
+function improvementName(count) {
+  return count >= 5 ? "Mansion" : "Townhome";
+}
+
+function indefiniteImprovementName(count) {
+  return count >= 5 ? "a mansion" : "a townhome";
+}
+
+function improvementLabel(count) {
+  if (count >= 5) return "Mansion";
+  return `${count} townhome${count === 1 ? "" : "s"}`;
 }
 
 function dieMarkup(value, variant = "full") {

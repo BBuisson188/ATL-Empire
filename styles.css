@@ -483,6 +483,11 @@ select {
   pointer-events: none;
 }
 
+.deck-stack-slot,
+.center-turn-console-slot {
+  display: contents;
+}
+
 .deck-row .center-turn-console {
   width: min(100%, 680px);
   margin: clamp(104px, 10vw, 132px) auto 0;
@@ -1360,6 +1365,37 @@ select {
   justify-content: center;
   pointer-events: none;
   z-index: 5;
+}
+
+.improvements-here {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: min(58%, 58px);
+  transform: translate(-50%, -48%);
+  pointer-events: none;
+}
+
+.improvement-marker {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 54px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 4px rgba(10, 14, 12, 0.28));
+}
+
+.edge-left .improvements-here,
+.edge-right .improvements-here {
+  width: min(52%, 50px);
+}
+
+.edge-top .improvements-here,
+.edge-bottom .improvements-here {
+  transform: translate(-50%, -44%);
 }
 
 .board-token {
