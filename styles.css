@@ -449,7 +449,7 @@ select {
 
 .lottery-pot-badge {
   position: absolute;
-  top: -72px;
+  top: clamp(-122px, -7.5vw, -86px);
   left: 0;
   z-index: 4;
   pointer-events: auto;
@@ -1001,12 +1001,22 @@ select {
   position: absolute;
   top: 0;
   right: 0;
-  width: 0;
-  height: 0;
-  border-top: 28px solid var(--owner-color);
-  border-left: 28px solid transparent;
+  width: 32px;
+  height: 32px;
+  background: var(--owner-color);
+  clip-path: polygon(100% 0, 100% 100%, 0 0);
+  border-top-right-radius: 14px;
   z-index: 3;
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.15));
+}
+
+.edge-right .owner-flag {
+  top: 0;
+  right: auto;
+  left: 0;
+  clip-path: polygon(0 0, 100% 0, 0 100%);
+  border-top-left-radius: 14px;
+  border-top-right-radius: 0;
 }
 
 .color-band {
@@ -1025,7 +1035,7 @@ select {
 }
 
 .space.card .space-inner {
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: 1fr auto;
   align-content: center;
   justify-content: center;
   justify-items: center;
@@ -1042,16 +1052,12 @@ select {
 }
 
 .space.card .space-label {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(255, 250, 240, 0.88);
-  border: 1px solid rgba(128, 101, 54, 0.18);
-  justify-self: center;
+  display: none;
 }
 
 .space.card .space-art {
   position: absolute;
-  inset: 20px 4px 18px;
+  inset: 20px 4px 28px;
   width: auto;
   height: auto;
   border: 0;
@@ -1062,19 +1068,33 @@ select {
 
 .space.card .generated-art-thumb {
   object-fit: cover;
-  transform: scale(1.18);
-  transform-origin: center center;
+  transform: scale(1.12);
+  transform-origin: center top;
 }
 
 .space.card .space-name {
-  position: relative;
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
   z-index: 2;
-  width: 100%;
+  width: auto;
   max-width: 100%;
   font-size: clamp(0.48rem, 0.72vw, 0.72rem);
   line-height: 1.04;
   text-align: center;
   text-wrap: balance;
+  color: #fffdf8;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.96),
+    1px 0 0 rgba(0, 0, 0, 0.96),
+    -1px 0 0 rgba(0, 0, 0, 0.96),
+    0 -1px 0 rgba(0, 0, 0, 0.96),
+    1px 1px 0 rgba(0, 0, 0, 0.84),
+    -1px 1px 0 rgba(0, 0, 0, 0.84),
+    1px -1px 0 rgba(0, 0, 0, 0.84),
+    -1px -1px 0 rgba(0, 0, 0, 0.84),
+    0 4px 10px rgba(0, 0, 0, 0.22);
 }
 
 .space-art {
@@ -1145,6 +1165,58 @@ select {
     1px -1px 0 rgba(0, 0, 0, 0.84),
     -1px -1px 0 rgba(0, 0, 0, 0.84),
     0 4px 10px rgba(0, 0, 0, 0.22);
+}
+
+.edge-left .space-label,
+.edge-right .space-label,
+.edge-left .space-name,
+.edge-right .space-name {
+  width: calc(100% - 8px);
+  max-width: calc(100% - 8px);
+}
+
+.space.tax .space-inner {
+  background:
+    linear-gradient(180deg, rgba(255, 249, 236, 0.14), rgba(255, 249, 236, 0)),
+    linear-gradient(180deg, #c75c45 0%, #9f3f33 100%);
+  padding: 6px 5px 7px;
+}
+
+.space.tax .space-label,
+.space.tax .space-name {
+  position: relative;
+  z-index: 3;
+  color: #fffdf8;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.94),
+    1px 0 0 rgba(0, 0, 0, 0.94),
+    -1px 0 0 rgba(0, 0, 0, 0.94),
+    0 -1px 0 rgba(0, 0, 0, 0.94),
+    1px 1px 0 rgba(0, 0, 0, 0.82),
+    -1px 1px 0 rgba(0, 0, 0, 0.82),
+    1px -1px 0 rgba(0, 0, 0, 0.82),
+    -1px -1px 0 rgba(0, 0, 0, 0.82),
+    0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.space.tax .space-art {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 16px;
+  bottom: 18px;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  z-index: 1;
+}
+
+.space.tax .generated-art-thumb {
+  object-fit: cover;
+  transform: scale(1.5);
+  transform-origin: center center;
 }
 
 .space.property .space-label,
