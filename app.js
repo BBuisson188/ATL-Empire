@@ -437,7 +437,6 @@ function renderBoard() {
         ${renderDeckStack("community")}
       </div>
     </div>
-    ${game.debt ? debtDockHtml() : ""}
   `;
   els.board.appendChild(center);
   board.forEach((space) => {
@@ -477,11 +476,6 @@ function renderBoard() {
     event.stopPropagation();
     renderAuctionModal();
   });
-  const debtDock = els.board.querySelector("[data-open-debt]");
-  if (debtDock) debtDock.addEventListener("click", (event) => {
-    event.stopPropagation();
-    renderDebtModal();
-  });
 }
 
 function updateBoardMotion() {
@@ -504,17 +498,6 @@ function auctionDockHtml() {
       <span>Auction</span>
       <strong>${space.name}</strong>
       <em>${bidder ? `${bidder.name}'s turn` : "Open"}</em>
-    </button>
-  `;
-}
-
-function debtDockHtml() {
-  const player = playerById(game.debt.playerId);
-  return `
-    <button type="button" class="debt-dock" data-open-debt>
-      <span>Debt</span>
-      <strong>${player.name} needs $${Math.abs(player.cash)}</strong>
-      <em>Tap to choose how to raise cash</em>
     </button>
   `;
 }
@@ -675,7 +658,7 @@ function getTurnControls(player) {
     if (game.auction) {
       diceHtml = `<button type="button" class="center-roll-button" data-center-action="auctionPanel">Auction</button>`;
     }
-    if (game.phase === "debt") {
+    if (game.debt) {
       diceHtml = `<button type="button" class="center-roll-button debt-roll-button" data-center-action="debt">Raise Cash</button>`;
     }
     if (game.phase === "roll") {
@@ -689,7 +672,7 @@ function getTurnControls(player) {
     }
     if (game.phase === "rolling") actions.push(button("Rolling...", "noop", true));
     if (game.phase === "pending") actions.push(button(game.pending?.label || "Next", "pending"));
-    if (game.phase === "debt") actions.push(button("Raise Cash", "debt"));
+    if (game.debt) actions.push(button("Raise Cash", "debt"));
     if (game.phase === "trafficExit") {
       if (player.peachPasses > 0) actions.push(button("Use Peach Pass", "trafficExitPass"));
       actions.push(button(`Buy Peach Pass $${TRAFFIC_FINE}`, "trafficExitPay"));
@@ -731,10 +714,15 @@ function statusForCurrentTurn() {
   if (!player) return "";
   if (game.animating) return game.status || `${player.name} is moving.`;
   if (game.phase === "over") return `${player.name} wins.`;
+  if (game.debt) {
+    const debtor = playerById(game.debt.playerId);
+    const shortfall = Math.max(0, -(debtor?.cash || 0));
+    if (shortfall <= 0) return `${debtor?.name || player.name} has enough cash to pay ${debtCreditorName(game.debt)}.`;
+    return `${debtor?.name || player.name} needs to raise $${shortfall} to pay ${debtCreditorName(game.debt)}.`;
+  }
   if (game.phase === "rolling") return `${player.name} is rolling.`;
   if (game.phase === "buy") return `${board[player.position].name} is available for $${board[player.position].price}.`;
   if (game.phase === "pending") return game.pending?.message || "Resolve the pending action.";
-  if (game.phase === "debt") return `${player.name} needs to raise $${Math.abs(player.cash)} to pay ${debtCreditorName(game.debt)}.`;
   if (game.phase === "trafficExit") return `${player.name} did not roll doubles on the third traffic turn. Use a Peach Pass or buy one for $${TRAFFIC_FINE}, then move ${game.trafficExit?.total || 0}.`;
   if (game.phase === "resolve") return `${player.name} is at ${board[player.position].name}. End the turn when ready.`;
   if (player.inTraffic) return trafficRollStatus(player);
@@ -1385,8 +1373,9 @@ function resolveDebt(player, debtData = {}) {
 function renderDebtModal() {
   const debt = game.debt;
   if (!debt) return;
+  game.phase = "debt";
   const player = playerById(debt.playerId);
-  const need = Math.abs(player.cash);
+  const need = Math.max(0, -player.cash);
   const liquidation = liquidationSummary(player);
   const canBankrupt = canDeclareBankruptcy(player);
   const recommendations = mortgageRecommendations(player);
@@ -1415,8 +1404,8 @@ function renderDebtModal() {
   document.getElementById("debt-manage").addEventListener("click", () => openManageModal(player));
   document.getElementById("debt-trade").addEventListener("click", () => openTradeModal(player));
   document.getElementById("debt-auto").addEventListener("click", () => {
-    autoRaiseCash(player);
-    finishDebtIfSolved(false);
+    autoRaiseCash();
+    finishDebtIfSolved();
     if (game.debt) renderDebtModal();
   });
   document.getElementById("debt-bankrupt").addEventListener("click", () => bankruptPlayer(player));
@@ -1424,13 +1413,14 @@ function renderDebtModal() {
   els.modalContent.querySelectorAll("[data-debt-mortgage]").forEach((buttonEl) => {
     buttonEl.addEventListener("click", () => {
       mortgageProperty(player, Number(buttonEl.dataset.debtMortgage));
-      finishDebtIfSolved(false);
+      finishDebtIfSolved();
       if (game.debt) renderDebtModal();
     });
   });
 }
 
 function minimizeDebt() {
+  if (game.debt) game.phase = "debt";
   closeModal();
   render();
 }
@@ -1540,16 +1530,27 @@ function bankruptToPlayer(player, debt) {
   render();
 }
 
-function autoRaiseCash(player) {
-  if (!game.debt || game.debt.playerId !== player.id) return;
-  log(`${player.name} chose Auto Raise Cash. The Bank will sell buildings first, then mortgage eligible properties.`);
-  autoSellBuildings(player);
-  mortgageRecommendations(player).forEach((space) => {
-    if (player.cash >= 0) return;
-    mortgageProperty(player, space.index);
+function autoRaiseCash(player = null) {
+  const debt = game.debt;
+  const debtor = debt ? playerById(debt.playerId) : player;
+  if (!debt || !debtor) return;
+  game.phase = "debt";
+  const startingCash = debtor.cash;
+  log(`${debtor.name} chose Auto Raise Cash. The Bank will sell buildings first, then mortgage eligible properties.`);
+  autoSellBuildings(debtor);
+  mortgageRecommendations(debtor).forEach((space) => {
+    if (debtor.cash >= 0) return;
+    mortgageProperty(debtor, space.index);
   });
-  if (player.cash < 0) {
-    log(`${player.name} is still short $${Math.abs(player.cash)} after legal automatic liquidation.`);
+  if (debtor.cash === startingCash) {
+    game.status = `${debtor.name} has no automatic sell or mortgage move available right now.`;
+    log(game.status);
+  } else {
+    game.status = `${debtor.name} auto-raised $${debtor.cash - startingCash}.`;
+    log(game.status);
+  }
+  if (debtor.cash < 0) {
+    log(`${debtor.name} is still short $${Math.abs(debtor.cash)} after legal automatic liquidation.`);
   }
 }
 

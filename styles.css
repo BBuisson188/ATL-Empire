@@ -449,7 +449,7 @@ select {
 
 .lottery-pot-badge {
   position: absolute;
-  top: -28px;
+  top: -72px;
   left: 0;
   z-index: 4;
   pointer-events: auto;
@@ -1050,11 +1050,25 @@ select {
 }
 
 .space.card .space-art {
-  width: 58px;
-  height: 46px;
+  position: absolute;
+  inset: 20px 4px 18px;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  z-index: 1;
+}
+
+.space.card .generated-art-thumb {
+  object-fit: cover;
+  transform: scale(1.18);
+  transform-origin: center center;
 }
 
 .space.card .space-name {
+  position: relative;
+  z-index: 2;
   width: 100%;
   max-width: 100%;
   font-size: clamp(0.48rem, 0.72vw, 0.72rem);
