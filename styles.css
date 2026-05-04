@@ -1374,7 +1374,7 @@ select {
   z-index: 4;
   display: grid;
   place-items: center;
-  width: min(58%, 58px);
+  width: min(64%, 64px);
   transform: translate(-50%, -48%);
   pointer-events: none;
 }
@@ -1383,18 +1383,24 @@ select {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 54px;
+  max-height: 58px;
   object-fit: contain;
   filter: drop-shadow(0 4px 4px rgba(10, 14, 12, 0.28));
 }
 
-.edge-left .improvements-here,
+.edge-left .improvements-here {
+  width: min(44%, 44px);
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+
 .edge-right .improvements-here {
-  width: min(52%, 50px);
+  width: min(44%, 44px);
+  transform: translate(-50%, -50%) rotate(-90deg);
 }
 
 .edge-top .improvements-here,
 .edge-bottom .improvements-here {
+  width: min(70%, 68px);
   transform: translate(-50%, -44%);
 }
 
