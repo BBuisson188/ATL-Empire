@@ -79,7 +79,7 @@ const board = [
   cardSpace("chance", "Peachtree Chance"),
   deed("Perimeter Mall", "lightBlue", "A suburban shopping hub with a bright circular atrium."),
   deed("Phipps Plaza", "lightBlue", "A luxury mall card with gold trim and valet lights."),
-  corner("traffic", "Stuck in Rush Hour", "Just visiting unless you were sent here."),
+  corner("traffic", "Rush Hour Reverse Commute", "Just passing through unless you were sent here."),
   deed("Whitefield Academy", "pink", "A school crest, chapel roofline, and neat green quad."),
   utility("Georgia Power"),
   deed("Marist School", "pink", "A campus card with classic brick and blue-green fields."),
@@ -989,6 +989,10 @@ async function resolveLanding(player) {
       game.status = `${player.name} landed on Georgia Lottery. No pot to collect.`;
     }
   }
+  if (space.type === "traffic") {
+    log(`${player.name} hit the Rush Hour Reverse Commute.`);
+    game.status = `${player.name} is on the Rush Hour Reverse Commute. Just passing through.`;
+  }
   if (space.type === "goToTraffic") {
     if (!game.autoPlay) {
       setPending("goTraffic", player, `${player.name} hit I-285 at 5PM. Go to rush hour traffic.`, "Go To Traffic", {});
@@ -1444,16 +1448,20 @@ function renderDebtModal() {
   const liquidation = liquidationSummary(player);
   const canBankrupt = canDeclareBankruptcy(player);
   const recommendations = mortgageRecommendations(player);
+  const tradable = tradablePropertiesForDebt(player);
   showModal(`
     <h2>Raise Cash</h2>
-    <p class="modal-note">${escapeHtml(player.name)} owes $${debt.amount} to ${escapeHtml(debtCreditorName(debt))} and is short $${need}. Official rules require selling buildings and mortgaging eligible properties before bankruptcy.</p>
+    <p class="modal-note">${escapeHtml(player.name)} owes $${debt.amount} to ${escapeHtml(debtCreditorName(debt))} and is short $${need}. Raise funds through any legal method: sell buildings, mortgage eligible properties, or trade eligible undeveloped properties.</p>
     <div class="debt-summary">
       <strong>Cash: $${player.cash}</strong>
-      <span>Legal liquidation available: $${liquidation.available}</span>
-      <span>Recommended: ${recommendations[0] ? `${recommendations[0].name} for $${recommendations[0].mortgage}` : "Sell buildings or no mortgage available"}</span>
+      <span>Sell buildings: $${liquidation.buildingValue}</span>
+      <span>Mortgage eligible properties: $${liquidation.mortgageValue}</span>
+      <span>Possible trade cash: $${liquidation.tradeCapacity}</span>
     </div>
     <div class="manage-list">
-      ${recommendations.map((space) => debtMortgageRow(player, space)).join("") || "<p>No properties can be mortgaged yet. Sell buildings first, complete a trade, or declare bankruptcy only if liquidation cannot cover the debt.</p>"}
+      ${recommendations.map((space) => debtMortgageRow(player, space)).join("")}
+      ${tradable.map((space) => debtTradeRow(space)).join("")}
+      ${recommendations.length || tradable.length ? "" : "<p>No direct mortgage or trade rows are available. Use Manage to sell buildings, or declare bankruptcy only if no legal combination can cover the debt.</p>"}
     </div>
     ${canBankrupt ? "" : `<p class="modal-note">${escapeHtml(bankruptcyBlockedMessage(player))}</p>`}
     <div class="modal-actions">
@@ -1467,7 +1475,10 @@ function renderDebtModal() {
   `, "debt");
   document.getElementById("debt-minimize").addEventListener("click", minimizeDebt);
   document.getElementById("debt-manage").addEventListener("click", () => openManageModal(player));
-  document.getElementById("debt-trade").addEventListener("click", () => openTradeModal(player));
+  document.getElementById("debt-trade").addEventListener("click", () => {
+    minimizeDebt();
+    openTradeModal(player);
+  });
   document.getElementById("debt-auto").addEventListener("click", () => {
     autoRaiseCash();
     finishDebtIfSolved();
@@ -1475,6 +1486,12 @@ function renderDebtModal() {
   });
   document.getElementById("debt-bankrupt").addEventListener("click", () => bankruptPlayer(player));
   document.getElementById("debt-continue").addEventListener("click", finishDebtIfSolved);
+  els.modalContent.querySelectorAll("[data-debt-trade]").forEach((buttonEl) => {
+    buttonEl.addEventListener("click", () => {
+      minimizeDebt();
+      openTradeModal(player);
+    });
+  });
   els.modalContent.querySelectorAll("[data-debt-mortgage]").forEach((buttonEl) => {
     buttonEl.addEventListener("click", () => {
       mortgageProperty(player, Number(buttonEl.dataset.debtMortgage));
@@ -1500,12 +1517,26 @@ function debtMortgageRow(player, space) {
   `;
 }
 
+function debtTradeRow(space) {
+  return `
+    <article class="manage-row">
+      <span class="chip" style="background:${groups[space.group].color}"></span>
+      <div><strong>${space.name}</strong><span>Eligible for trade</span></div>
+      <button data-debt-trade="${space.index}" type="button">Trade</button>
+    </article>
+  `;
+}
+
 function mortgageRecommendations(player) {
   return ownedProperties(player.id)
     .filter((space) => !mortgageBlockedReason(player, space.index))
     .sort((a, b) => {
       return a.mortgage - b.mortgage;
     });
+}
+
+function tradablePropertiesForDebt(player) {
+  return ownedProperties(player.id).filter((space) => transferBlockedReason(player, space.index) === "");
 }
 
 function finishDebtIfSolved(closeWhenDone = true) {
@@ -1655,8 +1686,14 @@ function liquidationSummary(player) {
     if (game.mortgaged[space.index]) return sum;
     return sum + space.mortgage;
   }, 0);
-  const available = Math.max(0, buildingValue + mortgageValue);
-  return { buildingValue, mortgageValue, available };
+  const tradeCapacity = tradablePropertiesForDebt(player).length
+    || ownedProperties(player.id).length
+    ? game.players
+      .filter((candidate) => candidate.id !== player.id && !candidate.bankrupt)
+      .reduce((sum, candidate) => sum + Math.max(0, candidate.cash), 0)
+    : 0;
+  const available = Math.max(0, buildingValue + mortgageValue + tradeCapacity);
+  return { buildingValue, mortgageValue, tradeCapacity, available };
 }
 
 function canDeclareBankruptcy(player) {
@@ -1667,7 +1704,7 @@ function canDeclareBankruptcy(player) {
 
 function bankruptcyBlockedMessage(player) {
   const liquidation = liquidationSummary(player);
-  return `${player.name} cannot declare bankruptcy yet. They can still raise up to $${liquidation.available} by selling buildings and mortgaging eligible properties.`;
+  return `${player.name} cannot declare bankruptcy yet. They can still raise up to $${liquidation.available} by selling buildings, mortgaging eligible properties, or trading eligible undeveloped properties.`;
 }
 
 function debtCreditorName(debt) {
@@ -1942,10 +1979,11 @@ function tradeBuilderHtml(left, right) {
 
 function tradeSideHtml(title, side, player) {
   const props = ownedProperties(player.id).filter((space) => transferBlockedReason(player, space.index) === "");
+  const maxCash = Math.max(0, player.cash);
   return `
     <section class="trade-side">
       <h3>${title}</h3>
-      <label>Cash<input id="${side}-cash" type="number" min="0" max="${player.cash}" value="0"></label>
+      <label>Cash<input id="${side}-cash" type="number" min="0" max="${maxCash}" value="0"></label>
       <div class="trade-props">
         ${props.map((space) => `<label><input type="checkbox" data-${side}-prop="${space.index}"> <span class="trade-chip" style="background:${groups[space.group].color}"></span><span><strong>${space.name}</strong><em>${groups[space.group].name}</em></span></label>`).join("") || "<p>No tradable properties.</p>"}
       </div>
@@ -2019,6 +2057,7 @@ function applyTrade(offer) {
   offer.rightProps.forEach((index) => game.owners[index] = from.id);
   log(`${from.name} and ${to.name} completed a trade.`);
   game.status = `${from.name} and ${to.name} completed a trade.`;
+  if (game.debt) finishDebtIfSolved(false);
 }
 
 function botAcceptsTrade(bot, offer) {
@@ -2442,7 +2481,7 @@ function boardRingClass(index) {
 
 function spaceLabel(space) {
   if (space.type === "go") return "Go";
-  if (space.type === "traffic") return "Gridlock";
+  if (space.type === "traffic") return "Reverse Commute";
   if (space.type === "lottery") return "Georgia Lottery";
   if (space.type === "goToTraffic") return "I-285 at 5PM";
   if (space.type === "tax") return "Tax";
