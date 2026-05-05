@@ -104,7 +104,7 @@ try {
 
 $commitInput = New-TemporaryFile
 @{
-  message = "Update raise cash flow and build 2026.05.05a"
+  message = "Restore rush hour square visuals and build 2026.05.05b"
   tree = $newTree.sha
   parents = @($parentSha)
 } | ForEach-Object { Write-JsonFile $commitInput $_ 5 }

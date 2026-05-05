@@ -79,7 +79,7 @@ const board = [
   cardSpace("chance", "Peachtree Chance"),
   deed("Perimeter Mall", "lightBlue", "A suburban shopping hub with a bright circular atrium."),
   deed("Phipps Plaza", "lightBlue", "A luxury mall card with gold trim and valet lights."),
-  corner("traffic", "Rush Hour Reverse Commute", "Just passing through unless you were sent here."),
+  corner("traffic", "Stuck in Rush Hour", "Just visiting unless you were sent here."),
   deed("Whitefield Academy", "pink", "A school crest, chapel roofline, and neat green quad."),
   utility("Georgia Power"),
   deed("Marist School", "pink", "A campus card with classic brick and blue-green fields."),
@@ -574,7 +574,7 @@ function renderPlayers() {
           <span class="player-token token-${player.token}" style="--token-color:${player.color}">${tokenMarkup(player.token)}</span>
           <div>
             <strong>${escapeHtml(player.name)}</strong>
-            <span>${player.isBot ? botProfiles[player.profile].label : "Human"} · ${board[player.position].name}</span>
+            <span>${player.isBot ? botProfiles[player.profile].label : "Human"} · ${playerLocationName(player)}</span>
           </div>
         </div>
         <div class="money">$${player.cash}</div>
@@ -693,7 +693,7 @@ function renderCenterTurnConsole(player) {
         <div class="center-spotlight">
           <span>Turn</span>
           <strong><span class="player-dot" style="background:${player.color}"></span>${escapeHtml(player.name)}</strong>
-          <em>${board[player.position].name}</em>
+          <em>${playerLocationName(player)}</em>
         </div>
         <div class="center-roll-bay" aria-live="polite">
           ${controls.diceHtml}
@@ -2086,7 +2086,7 @@ function openPlayerDetail(playerId) {
   const props = ownedProperties(player.id);
   showModal(`
     <h2><span class="player-dot" style="background:${player.color}"></span>${escapeHtml(player.name)}</h2>
-    <p class="modal-note">${player.isBot ? botProfiles[player.profile].label : "Human"} · ${board[player.position].name} · Cash $${player.cash}</p>
+    <p class="modal-note">${player.isBot ? botProfiles[player.profile].label : "Human"} · ${playerLocationName(player)} · Cash $${player.cash}</p>
     <div class="portfolio-list">
       ${groupIds().concat(["trail", "utility"]).map((group) => portfolioGroup(player, group)).join("")}
     </div>
@@ -2481,7 +2481,7 @@ function boardRingClass(index) {
 
 function spaceLabel(space) {
   if (space.type === "go") return "Go";
-  if (space.type === "traffic") return "Reverse Commute";
+  if (space.type === "traffic") return "Gridlock";
   if (space.type === "lottery") return "Georgia Lottery";
   if (space.type === "goToTraffic") return "I-285 at 5PM";
   if (space.type === "tax") return "Tax";
@@ -2494,6 +2494,12 @@ function spaceLabel(space) {
   if (space.group === "darkBlue") return "Airport";
   if (space.group && groups[space.group]) return groups[space.group].name;
   return "Space";
+}
+
+function playerLocationName(player) {
+  const space = board[player.position];
+  if (space?.type === "traffic" && !player.inTraffic) return "Rush Hour Reverse Commute";
+  return space?.name || "";
 }
 
 function activePlayer() {
