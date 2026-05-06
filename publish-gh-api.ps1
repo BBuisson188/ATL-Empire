@@ -52,6 +52,7 @@ $paths = @(
   "assets/townhouse_2.png",
   "assets/townhouse_3.png",
   "assets/townhouse_4.png",
+  "assets/board/free_parking.png",
   "assets/board/atlanta-beltline.png",
   "assets/board/path400.png",
   "assets/board/silver-comet-trail.png",
@@ -104,7 +105,7 @@ try {
 
 $commitInput = New-TemporaryFile
 @{
-  message = "Restore rush hour square visuals and build 2026.05.05b"
+  message = "Add free parking board art"
   tree = $newTree.sha
   parents = @($parentSha)
 } | ForEach-Object { Write-JsonFile $commitInput $_ 5 }

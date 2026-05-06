@@ -433,7 +433,7 @@ function buildBoard() {
     <div class="center-frame">
       <img class="center-brand-image" src="assets/branding/atl-empire-board-logo-small.png" alt="ATL Empire board logo">
       <p class="center-tagline">Build districts, dodge traffic, and turn the city into your empire.</p>
-      <div class="lottery-pot-badge">
+      <div class="lottery-pot-badge ${game.lotteryEnabled === false ? "hidden" : ""}">
         <span>Lottery Pot</span>
         <strong>$${game.lotteryPot}</strong>
       </div>
@@ -460,7 +460,7 @@ function buildBoard() {
         ${space.group ? `<span class="color-band"></span>` : ""}
         <span class="space-label">${spaceLabel(space)}</span>
         <span class="space-art">${spaceArt(space, "thumb")}</span>
-        <span class="space-name">${boardRingClass(space.index) === "space-corner" ? cornerName(space) : space.name}</span>
+        <span class="space-name">${boardRingClass(space.index) === "space-corner" ? cornerName(space) : displaySpaceName(space)}</span>
         ${space.price ? `<span class="space-price">$${space.price}</span>` : ""}
         <span class="tokens-here">${tokensOn(space.index)}</span>
       </span>
@@ -478,6 +478,13 @@ function buildBoard() {
 }
 
 function updateBoardState() {
+  const lotteryBadge = els.board.querySelector(".lottery-pot-badge");
+  if (lotteryBadge) {
+    lotteryBadge.classList.toggle("hidden", game.lotteryEnabled === false);
+    const amount = lotteryBadge.querySelector("strong");
+    if (amount) amount.textContent = `$${game.lotteryPot}`;
+  }
+
   const currentPlayer = activePlayer();
   const consoleSlot = els.board.querySelector("[data-center-console-slot]");
   if (consoleSlot) consoleSlot.innerHTML = renderCenterTurnConsole(currentPlayer);
@@ -610,8 +617,8 @@ function renderSpaceDetail(index) {
         ${spaceArt(space, "detail")}
         <div class="detail-copy">
           <p class="detail-kicker">${spaceLabel(space)}</p>
-          <h3>${space.name}</h3>
-          <p>${space.description || space.art || ""}</p>
+          <h3>${displaySpaceName(space)}</h3>
+          <p>${displaySpaceDescription(space)}</p>
         </div>
       </div>
       ${space.price ? `<dl class="detail-grid">
@@ -985,8 +992,9 @@ async function resolveLanding(player) {
       game.status = `${player.name} won the Georgia Lottery pot.`;
       game.lotteryPot = 0;
     } else {
-      log(`${player.name} stopped at the Georgia Lottery.`);
-      game.status = `${player.name} landed on Georgia Lottery. No pot to collect.`;
+      const landingName = displaySpaceName(space);
+      log(`${player.name} stopped at ${landingName}.`);
+      game.status = isFreeParkingSpace(space) ? `${player.name} landed on ${landingName}.` : `${player.name} landed on ${landingName}. No pot to collect.`;
     }
   }
   if (space.type === "traffic") {
@@ -2117,8 +2125,8 @@ function showSpacePopover(index, anchor) {
         ${spaceArt(space, "detail")}
         <div class="detail-copy">
           <p class="detail-kicker">${spaceLabel(space)}</p>
-          <h3>${space.name}</h3>
-          <p>${space.description || space.art || ""}</p>
+          <h3>${displaySpaceName(space)}</h3>
+          <p>${displaySpaceDescription(space)}</p>
         </div>
       </div>
       ${owner ? `<p class="detail-owner"><span class="player-dot" style="background:${owner.color}"></span>Owned by ${escapeHtml(owner.name)}</p>` : ""}
@@ -2482,7 +2490,7 @@ function boardRingClass(index) {
 function spaceLabel(space) {
   if (space.type === "go") return "Go";
   if (space.type === "traffic") return "Gridlock";
-  if (space.type === "lottery") return "Georgia Lottery";
+  if (space.type === "lottery") return isFreeParkingSpace(space) ? "Free Parking" : "Georgia Lottery";
   if (space.type === "goToTraffic") return "I-285 at 5PM";
   if (space.type === "tax") return "Tax";
   if (space.type === "card") return space.deck === "chance" ? "Chance" : "Hood";
@@ -2499,7 +2507,7 @@ function spaceLabel(space) {
 function playerLocationName(player) {
   const space = board[player.position];
   if (space?.type === "traffic" && !player.inTraffic) return "Rush Hour Reverse Commute";
-  return space?.name || "";
+  return space ? displaySpaceName(space) : "";
 }
 
 function activePlayer() {
@@ -2691,7 +2699,7 @@ function spaceIcon(space) {
   if (space.type === "go") return svgIcon("peachtree");
   if (space.type === "traffic") return svgIcon("traffic");
   if (space.type === "goToTraffic") return svgIcon("road");
-  if (space.type === "lottery") return svgIcon("lottery");
+  if (space.type === "lottery") return svgIcon(isFreeParkingSpace(space) ? "parking" : "lottery");
   if (space.type === "tax") return svgIcon("tax");
   if (space.type === "card") return svgIcon(space.deck === "chance" ? "chance" : "heart");
   if (space.kind === "trail") return svgIcon("trail");
@@ -2707,7 +2715,7 @@ function spaceIcon(space) {
 }
 
 function spaceArt(space, variant = "detail") {
-  return zoomableArtFromSlug(spaceSlug(space), variant, spaceIcon(space), space.name);
+  return zoomableArtFromSlug(displaySpaceSlug(space), variant, spaceIcon(space), displaySpaceName(space));
 }
 
 function zoomableArtFromSlug(slug, variant, fallback, title = "") {
@@ -2722,6 +2730,23 @@ function assetImage(src, variant, fallback) {
 
 function spaceSlug(space) {
   return space.assetSlug || slugify(space.name);
+}
+
+function displaySpaceSlug(space) {
+  return isFreeParkingSpace(space) ? "free_parking" : spaceSlug(space);
+}
+
+function displaySpaceName(space) {
+  return isFreeParkingSpace(space) ? "Free Parking" : space.name;
+}
+
+function displaySpaceDescription(space) {
+  if (isFreeParkingSpace(space)) return "Take a breather on the classic Free Parking corner.";
+  return space.description || space.art || "";
+}
+
+function isFreeParkingSpace(space) {
+  return space.type === "lottery" && game?.lotteryEnabled === false;
 }
 
 function cornerName(space) {
@@ -2814,6 +2839,7 @@ function svgIcon(kind) {
     traffic: `<svg viewBox="0 0 64 64"><rect x="9" y="28" width="46" height="16" rx="5"/><circle cx="19" cy="48" r="5"/><circle cx="45" cy="48" r="5"/><path d="M18 28l6-10h16l7 10"/></svg>`,
     road: `<svg viewBox="0 0 64 64"><path d="M25 58 31 6h6l8 52"/><path d="M34 14v7M35 30v9M37 48v8"/></svg>`,
     lottery: `<svg viewBox="0 0 64 64"><rect x="12" y="18" width="40" height="30" rx="5"/><circle cx="24" cy="33" r="7"/><circle cx="40" cy="33" r="7"/><path d="M18 18v-6h28v6"/></svg>`,
+    parking: `<svg viewBox="0 0 64 64"><rect x="12" y="10" width="40" height="44" rx="6"/><path d="M26 48V18h11c8 0 13 5 13 12s-5 12-13 12H26"/><path d="M26 32h11"/></svg>`,
     tax: `<svg viewBox="0 0 64 64"><rect x="16" y="10" width="32" height="44" rx="3"/><path d="M23 22h18M23 32h18M23 42h10"/></svg>`,
     chance: `<svg viewBox="0 0 64 64"><path d="M26 44c0-10 12-10 12-21 0-7-5-12-13-12-6 0-11 3-14 8"/><circle cx="28" cy="54" r="4"/></svg>`,
     heart: `<svg viewBox="0 0 64 64"><path d="M32 53S10 39 10 23c0-8 5-13 12-13 5 0 8 3 10 6 2-3 5-6 10-6 7 0 12 5 12 13 0 16-22 30-22 30Z"/></svg>`,
