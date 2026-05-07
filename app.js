@@ -1987,7 +1987,7 @@ function tradeBuilderHtml(left, right) {
 
 function tradeSideHtml(title, side, player) {
   const props = ownedProperties(player.id).filter((space) => transferBlockedReason(player, space.index) === "");
-  const maxCash = Math.max(0, player.cash);
+  const maxCash = tradeCashAvailable(player);
   return `
     <section class="trade-side">
       <h3>${title}</h3>
@@ -2012,7 +2012,11 @@ function proposeTrade(from, to) {
   const rightCash = Number(document.getElementById("right-cash").value);
   const leftProps = [...els.modalContent.querySelectorAll("[data-left-prop]:checked")].map((input) => Number(input.dataset.leftProp));
   const rightProps = [...els.modalContent.querySelectorAll("[data-right-prop]:checked")].map((input) => Number(input.dataset.rightProp));
-  if (leftCash > from.cash || rightCash > to.cash) return;
+  if (!isValidTradeCash(leftCash, from) || !isValidTradeCash(rightCash, to)) {
+    game.status = "Trade cash cannot exceed a player's available cash.";
+    renderTurn();
+    return;
+  }
   const offer = { fromId: from.id, toId: to.id, leftCash, rightCash, leftProps, rightProps };
   if (to.isBot) {
     const accepted = botAcceptsTrade(to, offer);
@@ -2026,6 +2030,14 @@ function proposeTrade(from, to) {
     return;
   }
   renderTradeReview(offer);
+}
+
+function tradeCashAvailable(player) {
+  return Math.max(0, player.cash);
+}
+
+function isValidTradeCash(amount, player) {
+  return Number.isFinite(amount) && amount >= 0 && amount <= tradeCashAvailable(player);
 }
 
 function renderTradeReview(offer) {
