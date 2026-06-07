@@ -1,7 +1,9 @@
 {
   "name": "ATL Empire",
   "short_name": "ATL Empire",
+  "id": "./index.html",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f7f1e3",
   "theme_color": "#173d2d",

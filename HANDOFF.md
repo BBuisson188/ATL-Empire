@@ -6,14 +6,15 @@ Every publish must increment both version surfaces in `index.html`:
 
 - The visible setup-screen build stamp, for example `Build 2026.05.06a`.
 - The cache-busting query strings for `manifest.json`, `styles.css`, and `app.js`, for example `?v=20260506a`.
+- The `CACHE_VERSION` and matching app-shell query strings in `service-worker.js`.
 
-Keep those two formats equivalent on every published build. Do not publish code changes while leaving the visible build stamp behind the asset query version.
+Keep those formats equivalent on every published build. Do not publish code changes while leaving the visible build stamp behind the asset query version.
 
 ## Current Publish State
 
 - Repository: `BBuisson188/ATL-Empire`
 - Branch: `main`
-- Current build: `2026.05.06a`
+- Current build: `2026.06.07a`
 - The old `raise-cash-hotfix.js` compatibility script and ad hoc `publish-gh-api.ps1` script were removed from the app.
 
 ## Recent Fixes
@@ -28,7 +29,8 @@ Run at least:
 
 ```powershell
 node --check app.js
-rg -n "Build 2026|manifest.json\?v=|styles.css\?v=|app.js\?v=|raise-cash-hotfix" index.html
+node --check service-worker.js
+rg -n "Build 2026|manifest.json\?v=|styles.css\?v=|app.js\?v=|raise-cash-hotfix" index.html service-worker.js
 ```
 
 Confirm the build stamp and query-string versions match before updating GitHub `main`.

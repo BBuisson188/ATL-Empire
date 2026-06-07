@@ -216,7 +216,7 @@ let currentPanelTab = "space";
 init();
 
 function init() {
-  clearLegacyOfflineCache();
+  registerOfflineApp();
   registerGlobalUiEvents();
   if (els.cardGalleryRoot) {
     renderCardGalleryPage();
@@ -246,15 +246,11 @@ function init() {
   }
 }
 
-function clearLegacyOfflineCache() {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.getRegistrations().then((registrations) => {
-      registrations.forEach((registration) => registration.unregister().catch(() => {}));
-    }).catch(() => {});
-  }
-  if ("caches" in window) {
-    caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))).catch(() => {});
-  }
+function registerOfflineApp() {
+  if (!("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+  });
 }
 
 function registerGlobalUiEvents() {
